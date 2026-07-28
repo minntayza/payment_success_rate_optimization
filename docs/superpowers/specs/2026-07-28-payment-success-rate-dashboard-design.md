@@ -144,7 +144,7 @@ If prepared data fails validation at application startup, Streamlit displays a u
 Automated tests cover:
 
 - Deterministic gateway assignment for a fixed seed
-- Approximately uniform allocation across four gateways, using a tolerance appropriate for 1,000 random assignments
+- Approximately uniform allocation across four gateways: each gateway receives between 200 and 300 of the 1,000 transactions
 - Schema and value validation
 - Preservation of source row count and transaction outcomes
 - Overall and grouped success-rate calculations
