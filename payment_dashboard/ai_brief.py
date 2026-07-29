@@ -118,9 +118,7 @@ def generate_brief(
     timeout: float = 30.0,
 ) -> str:
     """Generate an English operations brief through a local Ollama service."""
-    resolved_url = (base_url or os.getenv("OLLAMA_URL", DEFAULT_OLLAMA_URL)).rstrip(
-        "/"
-    )
+    resolved_url = (base_url or os.getenv("OLLAMA_URL", DEFAULT_OLLAMA_URL)).rstrip("/")
     resolved_model = model or os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
     payload = {
         "model": resolved_model,
