@@ -42,3 +42,8 @@ def test_burmese_gateway_success_chart_label_matches_the_ui_contract() -> None:
     assert translate("charts.success_rate_by_gateway", "my") == (
         "ဂိတ်ဝေးအလိုက် အောင်မြင်နှုန်း"
     )
+
+
+def test_gateway_table_header_is_translated() -> None:
+    assert translate("table.gateway") == "Gateway"
+    assert translate("table.gateway", "my") == "ဂိတ်ဝေး"

@@ -73,6 +73,7 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "sections.failure_analysis_description": (
             "Break down failed transactions to identify recurring patterns."
         ),
+        "table.gateway": "Gateway",
         "table.recent_transactions": "Recent transactions",
         "guide.title": "How to interpret this dashboard",
         "guide.content": (
@@ -155,6 +156,7 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "sections.failure_analysis_description": (
             "ထပ်တလဲလဲ ဖြစ်ပေါ်နေသော ပုံစံများကို ရှာဖွေရန် မအောင်မြင်သော ငွေပေးချေမှုများကို ခွဲခြမ်းပါ။"
         ),
+        "table.gateway": "ဂိတ်ဝေး",
         "table.recent_transactions": "နောက်ဆုံး ငွေပေးချေမှုများ",
         "guide.title": "ဤ dashboard ကို နားလည်ရန်",
         "guide.content": (
