@@ -55,6 +55,7 @@ def test_language_toggle_preserves_filters_and_translates_app(
     app.toggle[0].set_value(True).run(timeout=10)
 
     assert app.title[0].value == "ငွေပေးချေမှု အောင်မြင်နှုန်း စောင့်ကြည့်စနစ်"
+    assert not app.exception
     assert app.sidebar.multiselect[0].options == english_gateway_options
     assert app.sidebar.slider[0].value == 120
     assert app.sidebar.multiselect[0].value == ["Gateway A"]

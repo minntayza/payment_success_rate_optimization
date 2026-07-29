@@ -1,4 +1,5 @@
 """Plotly chart builders."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -11,10 +12,22 @@ from payment_dashboard.analytics import (
     success_rate_series,
 )
 from payment_dashboard.config import CHART_COLORS
-from payment_dashboard.i18n import translate
+from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
+
+DIMENSION_KEYS = {
+    "Bank Gateway": "dimensions.gateway",
+    "Timestamp": "dimensions.timestamp",
+    "Fraud Flag": "dimensions.fraud_flag",
+    "Latency Band": "dimensions.latency_band",
+    "Device Used": "dimensions.device",
+    "Transaction Type": "dimensions.transaction_type",
+}
 
 
-def gateway_success_chart(frame: pd.DataFrame, language: str = "en") -> go.Figure:
+def gateway_success_chart(
+    frame: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> go.Figure:
     """Bar chart of success rate by gateway."""
     data = gateway_summary(frame)
     chart = px.bar(
@@ -25,7 +38,7 @@ def gateway_success_chart(frame: pd.DataFrame, language: str = "en") -> go.Figur
         color_discrete_sequence=CHART_COLORS,
         title=translate("charts.success_rate_by_gateway", language),
         labels={
-            "Bank Gateway": translate("sidebar.gateway", language),
+            "Bank Gateway": translate(DIMENSION_KEYS["Bank Gateway"], language),
             "success_rate": translate("kpi.success_rate", language),
         },
         range_y=[0, 1],
@@ -35,7 +48,10 @@ def gateway_success_chart(frame: pd.DataFrame, language: str = "en") -> go.Figur
     return chart
 
 
-def gateway_volume_chart(frame: pd.DataFrame, language: str = "en") -> go.Figure:
+def gateway_volume_chart(
+    frame: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> go.Figure:
     """Bar chart of transaction volume by gateway."""
     data = gateway_summary(frame)
     chart = px.bar(
@@ -46,7 +62,7 @@ def gateway_volume_chart(frame: pd.DataFrame, language: str = "en") -> go.Figure
         color_discrete_sequence=CHART_COLORS,
         title=translate("charts.transaction_volume_by_gateway", language),
         labels={
-            "Bank Gateway": translate("sidebar.gateway", language),
+            "Bank Gateway": translate(DIMENSION_KEYS["Bank Gateway"], language),
             "transaction_count": translate("kpi.transactions", language),
         },
         text_auto=True,
@@ -55,7 +71,10 @@ def gateway_volume_chart(frame: pd.DataFrame, language: str = "en") -> go.Figure
     return chart
 
 
-def success_trend_chart(frame: pd.DataFrame, language: str = "en") -> go.Figure:
+def success_trend_chart(
+    frame: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> go.Figure:
     """Line chart of success rate over time."""
     series = success_rate_series(frame)
     chart = px.line(
@@ -66,7 +85,7 @@ def success_trend_chart(frame: pd.DataFrame, language: str = "en") -> go.Figure:
         color_discrete_sequence=["#2563EB"],
         title=translate("charts.success_trend", language),
         labels={
-            "Timestamp": translate("Timestamp", language),
+            "Timestamp": translate(DIMENSION_KEYS["Timestamp"], language),
             "success_rate": translate("kpi.success_rate", language),
         },
     )
@@ -78,11 +97,11 @@ def failure_breakdown_chart(
     frame: pd.DataFrame,
     dimension: str,
     title: str,
-    language: str = "en",
+    language: Language = DEFAULT_LANGUAGE,
 ) -> go.Figure:
     """Bar chart of failures by a single dimension."""
     breakdown = failure_breakdown(frame, dimension)
-    display_dimension = _display_dimension(title, language)
+    display_dimension = _display_dimension(dimension, title, language)
     chart = px.bar(
         breakdown,
         x=dimension,
@@ -103,13 +122,13 @@ def failure_breakdown_chart(
     return chart
 
 
-def _display_dimension(title: str, language: str) -> str:
+def _display_dimension(
+    dimension: str,
+    title: str,
+    language: Language,
+) -> str:
     """Translate a failure-chart dimension when it has a catalog label."""
-    keys = {
-        "device": "sidebar.device",
-        "transaction type": "sidebar.transaction_type",
-    }
-    return translate(keys.get(title.lower(), title), language)
+    return translate(DIMENSION_KEYS.get(dimension, title), language)
 
 
 FAILURE_DIMENSIONS = (

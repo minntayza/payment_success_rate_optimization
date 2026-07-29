@@ -69,6 +69,12 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "charts.transaction_volume_by_gateway": "Transaction volume by gateway",
         "charts.success_trend": "Success trend",
         "charts.failures_by": "Failures by {title}",
+        "dimensions.gateway": "Gateway",
+        "dimensions.timestamp": "Timestamp",
+        "dimensions.fraud_flag": "Fraud flag",
+        "dimensions.latency_band": "Latency band",
+        "dimensions.device": "Device",
+        "dimensions.transaction_type": "Transaction type",
         "sections.failure_analysis": "Failure analysis",
         "sections.failure_analysis_description": (
             "Break down failed transactions to identify recurring patterns."
@@ -157,9 +163,15 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "health.drop": "လျော့ကျမှု",
         "charts.gateway_performance": "Gateway စွမ်းဆောင်ရည်",
         "charts.success_rate_by_gateway": "ဂိတ်ဝေးအလိုက် အောင်မြင်နှုန်း",
-        "charts.transaction_volume_by_gateway": "Gateway အလိုက် ငွေပေးချေမှုပမာဏ",
+        "charts.transaction_volume_by_gateway": "ဂိတ်ဝေးအလိုက် ငွေပေးချေမှုပမာဏ",
         "charts.success_trend": "အောင်မြင်နှုန်း လမ်းကြောင်း",
         "charts.failures_by": "{title} အလိုက် မအောင်မြင်မှုများ",
+        "dimensions.gateway": "ဂိတ်ဝေး",
+        "dimensions.timestamp": "အချိန်မှတ်တမ်း",
+        "dimensions.fraud_flag": "လိမ်လည်မှု အမှတ်အသား",
+        "dimensions.latency_band": "တုံ့ပြန်ချိန် အပိုင်းအခြား",
+        "dimensions.device": "အသုံးပြုသည့် စက်",
+        "dimensions.transaction_type": "ငွေပေးချေမှု အမျိုးအစား",
         "sections.failure_analysis": "မအောင်မြင်မှု ခွဲခြမ်းစိတ်ဖြာခြင်း",
         "sections.failure_analysis_description": (
             "ထပ်တလဲလဲ ဖြစ်ပေါ်နေသော ပုံစံများကို ရှာဖွေရန် မအောင်မြင်သော ငွေပေးချေမှုများကို ခွဲခြမ်းပါ။"

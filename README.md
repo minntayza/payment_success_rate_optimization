@@ -30,12 +30,17 @@ be interpreted as measurements of real banks or payment gateways.
 From the project directory:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+make setup
 mkdir -p data/raw data/processed
-cp /Users/mintayza/Downloads/transaction_data.csv data/raw/transaction_data.csv
+cp /path/to/transaction_data.csv data/raw/transaction_data.csv
+```
+
+`make setup` creates `.venv` and installs the project and development tools as
+an editable package. The equivalent manual install is:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
 ```
 
 The CSV files under `data/raw/` and `data/processed/` are intentionally ignored
@@ -46,10 +51,7 @@ by Git.
 Generate the gateway-enriched dataset:
 
 ```bash
-python -m payment_dashboard.prepare_data \
-  --input data/raw/transaction_data.csv \
-  --output data/processed/transactions_with_gateways.csv \
-  --seed 20260728
+make prepare
 ```
 
 The command:
@@ -63,13 +65,13 @@ The command:
 ## Run the tests
 
 ```bash
-python -m pytest -q
+make test
 ```
 
 ## Start the web app
 
 ```bash
-streamlit run payment_dashboard/app.py
+make run
 ```
 
 Open [http://localhost:8501](http://localhost:8501) if the browser does not open
@@ -145,7 +147,7 @@ transactions.
 Choose another port:
 
 ```bash
-streamlit run payment_dashboard/app.py --server.port 8502
+.venv/bin/python -m streamlit run payment_dashboard/app.py --server.port 8502
 ```
 
 ## Limitations

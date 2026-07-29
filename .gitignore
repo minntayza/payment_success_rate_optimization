@@ -4,5 +4,6 @@
 __pycache__/
 .pytest_cache/
 *.py[cod]
+*.egg-info/
 data/raw/*.csv
 data/processed/*.csv

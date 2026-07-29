@@ -13,7 +13,7 @@ from payment_dashboard.alerting import evaluate_alerts
 from payment_dashboard.analytics import add_latency_band, apply_filters
 from payment_dashboard.config import DEFAULT_DATA_PATH
 from payment_dashboard.data_loader import DataValidationError, load_transactions
-from payment_dashboard.i18n import DEFAULT_LANGUAGE, translate
+from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.models import DashboardState
 from payment_dashboard.ui.sections import (
     render_failure_analysis,
@@ -56,7 +56,7 @@ def build_dashboard_state(
     )
 
 
-def _render_language_toggle() -> str:
+def _render_language_toggle() -> Language:
     """Render the top-of-page language switch and return its language code."""
     use_burmese = st.toggle(
         "English / မြန်မာ",
@@ -66,7 +66,7 @@ def _render_language_toggle() -> str:
     return "my" if use_burmese else DEFAULT_LANGUAGE
 
 
-def _load_data(language: str = DEFAULT_LANGUAGE) -> pd.DataFrame:
+def _load_data(language: Language = DEFAULT_LANGUAGE) -> pd.DataFrame:
     """Load transaction data or show Streamlit error and stop."""
     data_path = Path(os.getenv("PAYMENT_DATA_PATH", str(DEFAULT_DATA_PATH)))
     try:
@@ -89,7 +89,7 @@ def _sidebar_value(widget_key: str, default: object) -> object:
 
 def _render_sidebar(
     full_frame: pd.DataFrame,
-    language: str = DEFAULT_LANGUAGE,
+    language: Language = DEFAULT_LANGUAGE,
 ) -> tuple[int, list[str], list[str], list[str], list[str], date, date]:
     """Render sidebar controls and return filter selections."""
     st.sidebar.header(translate("sidebar.controls", language))
@@ -175,8 +175,11 @@ def _render_sidebar(
 
 def render_app() -> None:
     """Main Streamlit application."""
+    configured_language: Language = (
+        "my" if st.session_state.get("language_toggle", False) else DEFAULT_LANGUAGE
+    )
     st.set_page_config(
-        page_title="Payment Success Monitor",
+        page_title=translate("dashboard.title", configured_language),
         page_icon="💳",
         layout="wide",
         initial_sidebar_state="expanded",

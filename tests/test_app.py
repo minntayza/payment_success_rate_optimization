@@ -11,6 +11,7 @@ import streamlit as st
 from pytest import MonkeyPatch, fixture
 from streamlit.testing.v1 import AppTest
 
+import payment_dashboard.app as app_module
 from payment_dashboard.alerting import evaluate_alerts
 from payment_dashboard.app import (
     _render_language_toggle,
@@ -39,6 +40,7 @@ def dashboard_fixture(sample_transactions: pd.DataFrame) -> pd.DataFrame:
     return full
 
 
+@pytest.mark.integration
 def test_language_toggle_defaults_to_english(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -47,6 +49,7 @@ def test_language_toggle_defaults_to_english(
     assert _render_language_toggle() == "en"
 
 
+@pytest.mark.integration
 def test_burmese_mode_keeps_neutral_filter_values(
     monkeypatch: pytest.MonkeyPatch, sample_transactions: pd.DataFrame
 ) -> None:
@@ -60,6 +63,44 @@ def test_burmese_mode_keeps_neutral_filter_values(
 
     gateway_options = multiselect.call_args_list[0].args[1]
     assert "Gateway A" in gateway_options
+
+
+@pytest.mark.integration
+def test_burmese_session_state_sets_burmese_browser_page_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    configured: dict[str, object] = {}
+
+    class TrackedSessionState(dict[str, object]):
+        def get(self, key: str, default: object = None) -> object:
+            events.append("session_state")
+            return super().get(key, default)
+
+    class StopAfterPageConfig(Exception):
+        pass
+
+    def capture_page_config(**values: object) -> None:
+        events.append("set_page_config")
+        configured.update(values)
+
+    def stop_after_page_config() -> None:
+        events.append("apply_page_style")
+        raise StopAfterPageConfig
+
+    monkeypatch.setattr(
+        app_module.st,
+        "session_state",
+        TrackedSessionState(language_toggle=True),
+    )
+    monkeypatch.setattr(app_module.st, "set_page_config", capture_page_config)
+    monkeypatch.setattr(app_module, "apply_page_style", stop_after_page_config)
+
+    with pytest.raises(StopAfterPageConfig):
+        app_module.render_app()
+
+    assert configured["page_title"] == "ငွေပေးချေမှု အောင်မြင်နှုန်း စောင့်ကြည့်စနစ်"
+    assert events == ["session_state", "set_page_config", "apply_page_style"]
 
 
 @pytest.mark.integration
@@ -133,6 +174,7 @@ def dashboard_state(sample_transactions: pd.DataFrame) -> DashboardState:
     return DashboardState(frame, frame, alerts)
 
 
+@pytest.mark.integration
 def test_kpis_render_burmese_labels(
     monkeypatch: MonkeyPatch, dashboard_state: DashboardState
 ) -> None:
@@ -146,6 +188,7 @@ def test_kpis_render_burmese_labels(
     assert columns[0].metric.call_args.args[0] == "ငွေပေးချေမှုများ"
 
 
+@pytest.mark.integration
 def test_gateway_health_keeps_gateway_values(
     monkeypatch: MonkeyPatch, dashboard_state: DashboardState
 ) -> None:
@@ -160,6 +203,7 @@ def test_gateway_health_keeps_gateway_values(
     assert set(captured[0]["ဂိတ်ဝေး"]) == set(dashboard_state.alerts["Bank Gateway"])
 
 
+@pytest.mark.integration
 def test_recent_transactions_localizes_headers_without_changing_values(
     monkeypatch: MonkeyPatch, dashboard_state: DashboardState
 ) -> None:

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pandas as pd
 import pytest
+from plotly import graph_objects as go
 
+from payment_dashboard.analytics import add_latency_band
 from payment_dashboard.ui.charts import (
     failure_breakdown_chart,
     gateway_success_chart,
+    gateway_volume_chart,
+    success_trend_chart,
 )
 
 
@@ -14,21 +20,96 @@ def dashboard_fixture(sample_transactions: pd.DataFrame) -> pd.DataFrame:
     frame = sample_transactions.copy()
     frame["Timestamp"] = pd.to_datetime(frame["Timestamp"])
     frame["Bank Gateway"] = ["Gateway A", "Gateway A", "Gateway B", "Gateway B"]
-    return frame
+    return add_latency_band(frame)
 
 
-def test_gateway_chart_localizes_title_without_changing_categories(
+@pytest.mark.parametrize(
+    ("builder", "title", "x_title", "y_title"),
+    [
+        (
+            gateway_success_chart,
+            "ဂိတ်ဝေးအလိုက် အောင်မြင်နှုန်း",
+            "ဂိတ်ဝေး",
+            "အောင်မြင်နှုန်း",
+        ),
+        (
+            gateway_volume_chart,
+            "ဂိတ်ဝေးအလိုက် ငွေပေးချေမှုပမာဏ",
+            "ဂိတ်ဝေး",
+            "ငွေပေးချေမှုများ",
+        ),
+    ],
+)
+def test_gateway_charts_localize_every_visible_label_without_changing_categories(
+    dashboard_fixture: pd.DataFrame,
+    builder: Callable[..., go.Figure],
+    title: str,
+    x_title: str,
+    y_title: str,
+) -> None:
+    chart = builder(dashboard_fixture, language="my")
+    categories = {value for trace in chart.data for value in trace.x}
+
+    assert chart.layout.title.text == title
+    assert chart.layout.xaxis.title.text == x_title
+    assert chart.layout.yaxis.title.text == y_title
+    assert categories <= set(dashboard_fixture["Bank Gateway"])
+
+
+def test_success_trend_localizes_every_visible_label(
     dashboard_fixture: pd.DataFrame,
 ) -> None:
-    chart = gateway_success_chart(dashboard_fixture, language="my")
+    chart = success_trend_chart(dashboard_fixture, language="my")
 
-    assert chart.layout.title.text == "ဂိတ်ဝေးအလိုက် အောင်မြင်နှုန်း"
-    assert set(chart.data[0].x) <= set(dashboard_fixture["Bank Gateway"])
+    assert chart.layout.title.text == "အောင်မြင်နှုန်း လမ်းကြောင်း"
+    assert chart.layout.xaxis.title.text == "အချိန်မှတ်တမ်း"
+    assert chart.layout.yaxis.title.text == "အောင်မြင်နှုန်း"
 
 
-def test_failure_chart_defaults_to_english(dashboard_fixture: pd.DataFrame) -> None:
+@pytest.mark.parametrize(
+    ("dimension", "title", "burmese_dimension", "burmese_title"),
+    [
+        (
+            "Fraud Flag",
+            "Fraud flag",
+            "လိမ်လည်မှု အမှတ်အသား",
+            "လိမ်လည်မှု အမှတ်အသား အလိုက် မအောင်မြင်မှုများ",
+        ),
+        (
+            "Latency Band",
+            "Latency band",
+            "တုံ့ပြန်ချိန် အပိုင်းအခြား",
+            "တုံ့ပြန်ချိန် အပိုင်းအခြား အလိုက် မအောင်မြင်မှုများ",
+        ),
+        (
+            "Device Used",
+            "Device",
+            "အသုံးပြုသည့် စက်",
+            "အသုံးပြုသည့် စက် အလိုက် မအောင်မြင်မှုများ",
+        ),
+        (
+            "Transaction Type",
+            "Transaction type",
+            "ငွေပေးချေမှု အမျိုးအစား",
+            "ငွေပေးချေမှု အမျိုးအစား အလိုက် မအောင်မြင်မှုများ",
+        ),
+    ],
+)
+def test_failure_charts_localize_every_visible_label_and_keep_category_values(
+    dashboard_fixture: pd.DataFrame,
+    dimension: str,
+    title: str,
+    burmese_dimension: str,
+    burmese_title: str,
+) -> None:
     chart = failure_breakdown_chart(
-        dashboard_fixture, "Device Used", "Device", language="en"
+        dashboard_fixture,
+        dimension,
+        title,
+        language="my",
     )
 
-    assert chart.layout.title.text == "Failures by device"
+    assert chart.layout.title.text == burmese_title
+    assert chart.layout.xaxis.title.text == burmese_dimension
+    assert chart.layout.yaxis.title.text == "မအောင်မြင်သော"
+    assert set(chart.data[0].x) <= set(dashboard_fixture[dimension])

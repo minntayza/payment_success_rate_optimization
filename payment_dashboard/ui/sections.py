@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from payment_dashboard.analytics import summary_metrics
-from payment_dashboard.i18n import translate
+from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.models import DashboardState
 from payment_dashboard.ui.charts import (
     FAILURE_DIMENSIONS,
@@ -40,7 +40,10 @@ RECENT_COLUMN_KEYS = {
 }
 
 
-def render_kpis(state: DashboardState, language: str = "en") -> None:
+def render_kpis(
+    state: DashboardState,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
     """Render the top-level KPI metric cards."""
     metrics = summary_metrics(state.display_frame)
     active_alerts = int(state.alerts["is_alert"].sum())
@@ -60,7 +63,10 @@ def render_kpis(state: DashboardState, language: str = "en") -> None:
     cols[4].metric(translate("kpi.active_alerts", language), active_alerts)
 
 
-def render_gateway_health(alerts: pd.DataFrame, language: str = "en") -> None:
+def render_gateway_health(
+    alerts: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
     """Render the gateway health table with alert status."""
     st.subheader(translate("health.title", language))
     st.caption(translate("health.description", language))
@@ -117,7 +123,10 @@ def render_gateway_health(alerts: pd.DataFrame, language: str = "en") -> None:
     )
 
 
-def render_gateway_performance(frame: pd.DataFrame, language: str = "en") -> None:
+def render_gateway_performance(
+    frame: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
     """Render gateway success rate and volume charts side by side."""
     st.subheader(translate("charts.gateway_performance", language))
     left, right = st.columns(2)
@@ -129,7 +138,10 @@ def render_gateway_performance(frame: pd.DataFrame, language: str = "en") -> Non
     )
 
 
-def render_success_trend(frame: pd.DataFrame, language: str = "en") -> None:
+def render_success_trend(
+    frame: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
     """Render the success rate trend line chart."""
     st.subheader(translate("charts.success_trend", language))
     st.plotly_chart(
@@ -137,7 +149,10 @@ def render_success_trend(frame: pd.DataFrame, language: str = "en") -> None:
     )
 
 
-def render_failure_analysis(frame: pd.DataFrame, language: str = "en") -> None:
+def render_failure_analysis(
+    frame: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
     """Render failure breakdown charts by four dimensions."""
     st.subheader(translate("sections.failure_analysis", language))
     st.caption(translate("sections.failure_analysis_description", language))
@@ -147,7 +162,10 @@ def render_failure_analysis(frame: pd.DataFrame, language: str = "en") -> None:
         columns[index % 2].plotly_chart(chart, use_container_width=True)
 
 
-def render_recent_transactions(frame: pd.DataFrame, language: str = "en") -> None:
+def render_recent_transactions(
+    frame: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
     """Render the recent transactions table."""
     st.subheader(translate("table.recent_transactions", language))
     display = frame.sort_values("Timestamp", ascending=False).head(25)[RECENT_COLUMNS]
@@ -164,7 +182,9 @@ def render_recent_transactions(frame: pd.DataFrame, language: str = "en") -> Non
     )
 
 
-def render_interpretation_guide(language: str = "en") -> None:
+def render_interpretation_guide(
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
     """Render the expandable interpretation guide."""
     with st.expander(translate("guide.title", language)):
         st.markdown(translate("guide.content", language))
