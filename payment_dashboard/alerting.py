@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from payment_dashboard.data_loader import GATEWAYS
+from payment_dashboard.config import ALERT_THRESHOLD, ALERT_WINDOW_SIZE, GATEWAYS
 
 
 def calculate_baselines(full_frame: pd.DataFrame) -> pd.Series:
@@ -19,8 +19,8 @@ def calculate_baselines(full_frame: pd.DataFrame) -> pd.Series:
 def evaluate_alerts(
     full_frame: pd.DataFrame,
     replay_frame: pd.DataFrame,
-    window_size: int = 50,
-    threshold: float = 0.10,
+    window_size: int = ALERT_WINDOW_SIZE,
+    threshold: float = ALERT_THRESHOLD,
 ) -> pd.DataFrame:
     baselines = calculate_baselines(full_frame)
     records: list[dict[str, object]] = []

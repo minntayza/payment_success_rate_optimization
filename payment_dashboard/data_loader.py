@@ -4,24 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-REQUIRED_COLUMNS = {
-    "Transaction ID",
-    "Sender Account ID",
-    "Receiver Account ID",
-    "Transaction Amount",
-    "Transaction Type",
-    "Timestamp",
-    "Transaction Status",
-    "Fraud Flag",
-    "Geolocation (Latitude/Longitude)",
-    "Device Used",
-    "Network Slice ID",
-    "Latency (ms)",
-    "Slice Bandwidth (Mbps)",
-    "PIN Code",
-}
-GATEWAYS = ("Gateway A", "Gateway B", "Gateway C", "Gateway D")
-STATUSES = {"Success", "Failed"}
+from payment_dashboard.config import GATEWAYS, REQUIRED_COLUMNS, STATUSES
 
 
 class DataValidationError(ValueError):

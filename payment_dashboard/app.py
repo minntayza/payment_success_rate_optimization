@@ -77,6 +77,16 @@ def _load_data(language: str = DEFAULT_LANGUAGE) -> pd.DataFrame:
         st.stop()
 
 
+def _persist_sidebar_value(widget_key: str) -> None:
+    """Copy a widget value to language-independent session state."""
+    st.session_state[f"{widget_key}_value"] = st.session_state[widget_key]
+
+
+def _sidebar_value(widget_key: str, default: object) -> object:
+    """Return the persisted sidebar value or its initial default."""
+    return st.session_state.get(f"{widget_key}_value", default)
+
+
 def _render_sidebar(
     full_frame: pd.DataFrame,
     language: str = DEFAULT_LANGUAGE,
@@ -88,8 +98,11 @@ def _render_sidebar(
         translate("sidebar.replayed_transactions", language),
         min_value=1,
         max_value=len(full_frame),
-        value=len(full_frame),
+        value=_sidebar_value("replay_count", len(full_frame)),
         help=translate("sidebar.replay_help", language),
+        key="replay_count",
+        on_change=_persist_sidebar_value,
+        args=("replay_count",),
     )
     st.sidebar.progress(replay_count / len(full_frame))
     st.sidebar.caption(
@@ -105,31 +118,50 @@ def _render_sidebar(
     gateways = st.sidebar.multiselect(
         translate("sidebar.gateway", language),
         sorted(full_frame["Bank Gateway"].unique()),
+        default=_sidebar_value("gateway_filter", []),
         placeholder=translate("sidebar.all_gateways", language),
+        key="gateway_filter",
+        on_change=_persist_sidebar_value,
+        args=("gateway_filter",),
     )
     transaction_types = st.sidebar.multiselect(
         translate("sidebar.transaction_type", language),
         sorted(full_frame["Transaction Type"].unique()),
+        default=_sidebar_value("transaction_type_filter", []),
         placeholder=translate("sidebar.all_transaction_types", language),
+        key="transaction_type_filter",
+        on_change=_persist_sidebar_value,
+        args=("transaction_type_filter",),
     )
     devices = st.sidebar.multiselect(
         translate("sidebar.device", language),
         sorted(full_frame["Device Used"].unique()),
+        default=_sidebar_value("device_filter", []),
         placeholder=translate("sidebar.all_devices", language),
+        key="device_filter",
+        on_change=_persist_sidebar_value,
+        args=("device_filter",),
     )
     statuses = st.sidebar.multiselect(
         translate("sidebar.status", language),
         sorted(full_frame["Transaction Status"].unique()),
+        default=_sidebar_value("status_filter", []),
         placeholder=translate("sidebar.all_statuses", language),
+        key="status_filter",
+        on_change=_persist_sidebar_value,
+        args=("status_filter",),
     )
 
     minimum_date = full_frame["Timestamp"].min().date()
     maximum_date = full_frame["Timestamp"].max().date()
     selected_dates = st.sidebar.date_input(
         translate("sidebar.date_range", language),
-        value=(minimum_date, maximum_date),
+        value=_sidebar_value("date_range_filter", (minimum_date, maximum_date)),
         min_value=minimum_date,
         max_value=maximum_date,
+        key="date_range_filter",
+        on_change=_persist_sidebar_value,
+        args=("date_range_filter",),
     )
     start, end = (
         selected_dates

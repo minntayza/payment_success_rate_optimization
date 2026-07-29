@@ -6,13 +6,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from payment_dashboard.config import DEFAULT_SEED, GATEWAYS
 from payment_dashboard.data_loader import (
-    GATEWAYS,
     load_transactions,
     validate_transactions,
 )
-
-DEFAULT_SEED = 20260728
 
 
 def assign_gateways(

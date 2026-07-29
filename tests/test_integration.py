@@ -21,17 +21,50 @@ from payment_dashboard.data_loader import load_transactions
 from payment_dashboard.prepare_data import assign_gateways
 
 
-def test_language_toggle_translates_app_and_keeps_gateway_values() -> None:
+@pytest.mark.integration
+def test_language_toggle_preserves_filters_and_translates_app(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prepared_path = tmp_path / "prepared_transactions.csv"
+    prepared = _make_transactions(200)
+    prepared["Timestamp"] = pd.date_range(
+        "2025-06-01",
+        periods=len(prepared),
+        freq="30min",
+    )
+    prepared.to_csv(prepared_path, index=False)
+    monkeypatch.setenv("PAYMENT_DATA_PATH", str(prepared_path))
+
     app_path = Path(__file__).parents[1] / "payment_dashboard" / "app.py"
     app = AppTest.from_file(str(app_path)).run(timeout=10)
     english_gateway_options = app.sidebar.multiselect[0].options
 
     assert app.title[0].value == "Payment Success Monitor"
+    assert not app.exception
+
+    app.sidebar.slider[0].set_value(120)
+    app.sidebar.multiselect[0].set_value(["Gateway A"])
+    app.sidebar.multiselect[1].set_value(["Transfer"])
+    app.sidebar.multiselect[2].set_value(["Mobile"])
+    app.sidebar.multiselect[3].set_value(["Success"])
+    app.sidebar.date_input[0].set_value((date(2025, 6, 2), date(2025, 6, 3)))
+    app.run(timeout=10)
+
+    assert app.sidebar.slider[0].value == 120
 
     app.toggle[0].set_value(True).run(timeout=10)
 
     assert app.title[0].value == "ငွေပေးချေမှု အောင်မြင်နှုန်း စောင့်ကြည့်စနစ်"
     assert app.sidebar.multiselect[0].options == english_gateway_options
+    assert app.sidebar.slider[0].value == 120
+    assert app.sidebar.multiselect[0].value == ["Gateway A"]
+    assert app.sidebar.multiselect[1].value == ["Transfer"]
+    assert app.sidebar.multiselect[2].value == ["Mobile"]
+    assert app.sidebar.multiselect[3].value == ["Success"]
+    assert app.sidebar.date_input[0].value == (
+        date(2025, 6, 2),
+        date(2025, 6, 3),
+    )
 
 
 # ---------------------------------------------------------------------------
