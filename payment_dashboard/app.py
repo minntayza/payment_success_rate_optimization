@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 # Ensure the project root is on sys.path so the package is importable
-# even when Streamlit Cloud installs deps without installing the package.
+# even when Streamlit Cloud runs this file directly.
 _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
