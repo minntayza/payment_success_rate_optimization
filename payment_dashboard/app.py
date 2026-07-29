@@ -16,6 +16,7 @@ from payment_dashboard.data_loader import DataValidationError, load_transactions
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.models import DashboardState
 from payment_dashboard.ui.sections import (
+    render_ai_operations_brief,
     render_failure_analysis,
     render_gateway_health,
     render_gateway_performance,
@@ -212,6 +213,7 @@ def render_app() -> None:
     )
 
     render_kpis(state, language=language)
+    render_ai_operations_brief(state)
     render_gateway_health(state.alerts, language=language)
 
     if state.display_frame.empty:

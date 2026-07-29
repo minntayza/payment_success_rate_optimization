@@ -5,6 +5,12 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from payment_dashboard.ai_brief import (
+    AIBriefError,
+    build_brief_facts,
+    facts_fingerprint,
+    generate_brief,
+)
 from payment_dashboard.analytics import summary_metrics
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.models import DashboardState
@@ -38,6 +44,48 @@ RECENT_COLUMN_KEYS = {
     "Latency (ms)": "table.latency_ms",
     "Fraud Flag": "table.fraud_flag",
 }
+
+AI_BRIEF_TEXT_KEY = "ai_brief_text"
+AI_BRIEF_FINGERPRINT_KEY = "ai_brief_fingerprint"
+
+
+def render_ai_operations_brief(state: DashboardState) -> None:
+    """Render button-triggered English analysis from aggregate local facts."""
+    st.subheader("AI Operations Brief")
+    st.caption(
+        "Generate an English summary with a local Ollama model. "
+        "Only aggregate dashboard metrics are shared."
+    )
+    facts = build_brief_facts(state.display_frame, state.alerts)
+    fingerprint = facts_fingerprint(facts)
+
+    if st.session_state.get(AI_BRIEF_FINGERPRINT_KEY) != fingerprint:
+        st.session_state.pop(AI_BRIEF_TEXT_KEY, None)
+        st.session_state.pop(AI_BRIEF_FINGERPRINT_KEY, None)
+
+    generate = st.button(
+        "Generate AI Brief",
+        disabled=state.display_frame.empty,
+        type="primary",
+    )
+    if state.display_frame.empty:
+        st.info("Select filters that return transactions before generating a brief.")
+
+    if generate:
+        try:
+            with st.spinner("Generating locally with Ollama..."):
+                brief = generate_brief(facts)
+        except AIBriefError as exc:
+            st.error(str(exc))
+        else:
+            st.session_state[AI_BRIEF_TEXT_KEY] = brief
+            st.session_state[AI_BRIEF_FINGERPRINT_KEY] = fingerprint
+
+    brief_text = st.session_state.get(AI_BRIEF_TEXT_KEY)
+    if isinstance(brief_text, str):
+        st.markdown(brief_text)
+        with st.expander("Evidence used by the local model"):
+            st.json(facts)
 
 
 def render_kpis(

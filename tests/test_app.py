@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -12,6 +13,8 @@ from pytest import MonkeyPatch, fixture
 from streamlit.testing.v1 import AppTest
 
 import payment_dashboard.app as app_module
+import payment_dashboard.ui.sections as sections_module
+from payment_dashboard.ai_brief import AIBriefError, OllamaUnavailableError
 from payment_dashboard.alerting import evaluate_alerts
 from payment_dashboard.app import (
     _render_language_toggle,
@@ -20,6 +23,7 @@ from payment_dashboard.app import (
 )
 from payment_dashboard.models import DashboardState
 from payment_dashboard.ui.sections import (
+    render_ai_operations_brief,
     render_gateway_health,
     render_kpis,
     render_recent_transactions,
@@ -245,3 +249,110 @@ def test_recent_transactions_localizes_headers_without_changing_values(
     pd.testing.assert_frame_equal(
         displayed.set_axis(expected.columns, axis="columns"), expected
     )
+
+
+@pytest.mark.integration
+def test_ai_brief_waits_for_button_click(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    monkeypatch.setattr(sections_module.st, "session_state", {})
+    monkeypatch.setattr(sections_module.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(
+        sections_module.st,
+        "button",
+        lambda *_, **__: False,
+    )
+    monkeypatch.setattr(
+        sections_module,
+        "generate_brief",
+        MagicMock(side_effect=AssertionError("model called before click")),
+    )
+
+    render_ai_operations_brief(dashboard_state)
+
+    sections_module.generate_brief.assert_not_called()
+
+
+@pytest.mark.integration
+def test_ai_brief_click_stores_text_and_evidence(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    session: dict[str, object] = {}
+    markdown: list[str] = []
+    evidence: list[object] = []
+    monkeypatch.setattr(sections_module.st, "session_state", session)
+    monkeypatch.setattr(sections_module.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "button", lambda *_, **__: True)
+    monkeypatch.setattr(sections_module.st, "spinner", lambda *_: nullcontext())
+    monkeypatch.setattr(sections_module.st, "markdown", markdown.append)
+    monkeypatch.setattr(sections_module.st, "expander", lambda *_: nullcontext())
+    monkeypatch.setattr(sections_module.st, "json", evidence.append)
+    monkeypatch.setattr(sections_module, "generate_brief", lambda facts: "AI result")
+
+    render_ai_operations_brief(dashboard_state)
+
+    assert session["ai_brief_text"] == "AI result"
+    assert session["ai_brief_fingerprint"]
+    assert markdown == ["AI result"]
+    assert evidence and evidence[0]["transaction_count"] == len(
+        dashboard_state.display_frame
+    )
+
+
+@pytest.mark.integration
+def test_ai_brief_invalidates_stale_text(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    session: dict[str, object] = {
+        "ai_brief_text": "stale",
+        "ai_brief_fingerprint": "different facts",
+    }
+    rendered: list[str] = []
+    monkeypatch.setattr(sections_module.st, "session_state", session)
+    monkeypatch.setattr(sections_module.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "button", lambda *_, **__: False)
+    monkeypatch.setattr(sections_module.st, "markdown", rendered.append)
+
+    render_ai_operations_brief(dashboard_state)
+
+    assert "ai_brief_text" not in session
+    assert "ai_brief_fingerprint" not in session
+    assert rendered == []
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (OllamaUnavailableError("run ollama serve"), "run ollama serve"),
+        (AIBriefError("bad local response"), "bad local response"),
+    ],
+)
+def test_ai_brief_shows_local_generation_errors(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+    error: AIBriefError,
+    expected: str,
+) -> None:
+    errors: list[str] = []
+    monkeypatch.setattr(sections_module.st, "session_state", {})
+    monkeypatch.setattr(sections_module.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "button", lambda *_, **__: True)
+    monkeypatch.setattr(sections_module.st, "spinner", lambda *_: nullcontext())
+    monkeypatch.setattr(sections_module.st, "error", errors.append)
+    monkeypatch.setattr(
+        sections_module,
+        "generate_brief",
+        MagicMock(side_effect=error),
+    )
+
+    render_ai_operations_brief(dashboard_state)
+
+    assert errors == [expected]
