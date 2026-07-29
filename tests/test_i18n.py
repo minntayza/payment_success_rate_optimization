@@ -41,9 +41,7 @@ def test_load_error_and_recovery_guidance_are_translated() -> None:
 
 
 def test_burmese_gateway_success_chart_label_matches_the_ui_contract() -> None:
-    assert translate("charts.success_rate_by_gateway", "my") == (
-        "ဂိတ်ဝေးအလိုက် အောင်မြင်နှုန်း"
-    )
+    assert translate("charts.success_rate_by_gateway", "my") == ("ဂိတ်ဝေးအလိုက် အောင်မြင်နှုန်း")
 
 
 def test_language_control_copy_is_bilingual() -> None:
