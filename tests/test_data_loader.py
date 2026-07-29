@@ -43,6 +43,7 @@ def test_negative_latency_is_rejected(sample_transactions):
         validate_transactions(invalid, require_gateway=False)
 
 
+@pytest.mark.integration
 def test_load_transactions_parses_types_and_sorts_timestamps(
     sample_transactions,
     tmp_path,
@@ -58,6 +59,7 @@ def test_load_transactions_parses_types_and_sorts_timestamps(
     assert pd.api.types.is_bool_dtype(loaded["Fraud Flag"])
 
 
+@pytest.mark.integration
 def test_load_transactions_rejects_missing_file(tmp_path):
     missing = tmp_path / "missing.csv"
 

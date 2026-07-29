@@ -40,10 +40,7 @@ def validate_transactions(
 
     if require_gateway:
         gateway_values = frame["Bank Gateway"]
-        if (
-            gateway_values.isna().any()
-            or not set(gateway_values).issubset(GATEWAYS)
-        ):
+        if gateway_values.isna().any() or not set(gateway_values).issubset(GATEWAYS):
             raise DataValidationError(
                 "Bank Gateway must contain exactly one value from Gateway A-D per row"
             )

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from payment_dashboard.config import DEFAULT_SEED, GATEWAYS
-from payment_dashboard.data_loader import (
-    load_transactions,
-    validate_transactions,
-)
+from payment_dashboard.data_loader import load_transactions, validate_transactions
+
+log = logging.getLogger(__name__)
 
 
 def assign_gateways(
@@ -29,9 +29,7 @@ def prepare_file(input_path: Path, output_path: Path, seed: int) -> None:
     validate_transactions(prepared, require_gateway=True)
     if len(prepared) != len(source):
         raise RuntimeError("Prepared row count differs from source")
-    if prepared["Transaction Status"].tolist() != source[
-        "Transaction Status"
-    ].tolist():
+    if prepared["Transaction Status"].tolist() != source["Transaction Status"].tolist():
         raise RuntimeError("Transaction outcomes changed during preparation")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     prepared.to_csv(output_path, index=False)
@@ -46,7 +44,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args()
     prepare_file(args.input, args.output, args.seed)
-    print(f"Prepared transactions written to {args.output}")
+    log.info("Prepared transactions written to %s", args.output)
 
 
 if __name__ == "__main__":

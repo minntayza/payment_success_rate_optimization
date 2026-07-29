@@ -26,23 +26,15 @@ def evaluate_alerts(
     records: list[dict[str, object]] = []
 
     for gateway in GATEWAYS:
-        gateway_rows = replay_frame.loc[
-            replay_frame["Bank Gateway"].eq(gateway)
-        ]
+        gateway_rows = replay_frame.loc[replay_frame["Bank Gateway"].eq(gateway)]
         sufficient = len(gateway_rows) >= window_size
         rolling_rate = (
-            gateway_rows.tail(window_size)["Transaction Status"]
-            .eq("Success")
-            .mean()
+            gateway_rows.tail(window_size)["Transaction Status"].eq("Success").mean()
             if sufficient
             else float("nan")
         )
         baseline = float(baselines[gateway])
-        drop = (
-            round(baseline - float(rolling_rate), 12)
-            if sufficient
-            else float("nan")
-        )
+        drop = round(baseline - float(rolling_rate), 12) if sufficient else float("nan")
         records.append(
             {
                 "Bank Gateway": gateway,

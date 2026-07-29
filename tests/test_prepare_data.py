@@ -15,9 +15,12 @@ def test_assignment_is_reproducible(sample_transactions):
 def test_assignment_preserves_source_data(sample_transactions):
     prepared = assign_gateways(sample_transactions, seed=42)
 
+    sorted_source = sample_transactions.sort_values(
+        "Timestamp", kind="stable"
+    ).reset_index(drop=True)
     pd.testing.assert_frame_equal(
         prepared.drop(columns=["Bank Gateway"]),
-        sample_transactions.sort_values("Timestamp", kind="stable").reset_index(drop=True),
+        sorted_source,
         check_dtype=False,
     )
 
