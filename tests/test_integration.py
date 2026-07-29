@@ -40,6 +40,8 @@ def test_language_toggle_preserves_filters_and_translates_app(
     english_gateway_options = app.sidebar.multiselect[0].options
 
     assert app.title[0].value == "Payment Success Monitor"
+    assert app.toggle[0].label == "Language / ဘာသာစကား"
+    assert "Current: English" in [caption.value for caption in app.caption]
     assert not app.exception
 
     app.sidebar.slider[0].set_value(120)
@@ -55,6 +57,8 @@ def test_language_toggle_preserves_filters_and_translates_app(
     app.toggle[0].set_value(True).run(timeout=10)
 
     assert app.title[0].value == "ငွေပေးချေမှု အောင်မြင်နှုန်း စောင့်ကြည့်စနစ်"
+    assert app.toggle[0].label == "Language / ဘာသာစကား"
+    assert "လက်ရှိ: မြန်မာ" in [caption.value for caption in app.caption]
     assert not app.exception
     assert app.sidebar.multiselect[0].options == english_gateway_options
     assert app.sidebar.slider[0].value == 120

@@ -58,12 +58,16 @@ def build_dashboard_state(
 
 def _render_language_toggle() -> Language:
     """Render the top-of-page language switch and return its language code."""
-    use_burmese = st.toggle(
-        "English / မြန်မာ",
-        value=False,
-        key="language_toggle",
-    )
-    return "my" if use_burmese else DEFAULT_LANGUAGE
+    with st.container(border=True):
+        use_burmese = st.toggle(
+            translate("language.control_label"),
+            value=False,
+            key="language_toggle",
+        )
+        language: Language = "my" if use_burmese else DEFAULT_LANGUAGE
+        language_name = translate(f"language.{'burmese' if use_burmese else 'english'}")
+        st.caption(translate("language.current", language, name=language_name))
+    return language
 
 
 def _load_data(language: Language = DEFAULT_LANGUAGE) -> pd.DataFrame:
