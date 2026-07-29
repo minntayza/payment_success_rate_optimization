@@ -68,6 +68,8 @@ payment_dashboard/
   analytics.py         # Pure metric functions (no side effects)
   alerting.py          # Baseline and rolling-window alert logic
   prepare_data.py      # CLI script for gateway enrichment
+  ai_brief.py          # AI operations brief generation (Anthropic-compatible endpoint)
+  i18n.py              # English/Burmese translation system
   app.py               # Streamlit entry point, session state, orchestration
   ui/
     __init__.py
@@ -93,6 +95,9 @@ payment_dashboard/
 - **`analytics.py`** — Pure functions: `summary_metrics()`, `gateway_summary()`, `failure_breakdown()`, `success_rate_series()`, `apply_filters()`, `add_latency_band()`.
 - **`alerting.py`** — `calculate_baselines()` and `evaluate_alerts()` compare rolling-window rates against full-dataset baselines.
 - **`data_loader.py`** — `validate_transactions()` and `load_transactions()` with schema enforcement. Raises `DataValidationError`.
+- **`ai_brief.py`** — Builds the prompt and calls an Anthropic-compatible endpoint (MiMo 2.5 Pro by default). Only aggregate metrics are sent; raw transaction rows, IDs, timestamps, and individual amounts are excluded.
+- **`i18n.py`** — `translate()` function and `Language` type (`"en"` | `"my"`). String keys map to English/Burmese UI text. Gateway names and transaction category values are not translated.
+- **`prepare_data.py`** — Also exposed as the `payment-prepare` console script via `pyproject.toml [project.scripts]`.
 
 ### Alert Logic
 - Baseline = gateway's success rate across entire processed dataset
@@ -115,3 +120,4 @@ Required columns in CSV: `Transaction ID`, `Sender Account ID`, `Receiver Accoun
 - Gateway labels (A-D) are randomly simulated with a fixed seed — do not interpret as real gateway performance
 - The replay slider simulates chronological arrival from CSV, not a streaming pipeline
 - `data/raw/` and `data/processed/` are gitignored; source CSV must be provided manually
+- Customer support interpretation guide: `docs/customer-support-guide.md`

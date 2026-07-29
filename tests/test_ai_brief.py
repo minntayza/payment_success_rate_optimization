@@ -128,7 +128,7 @@ def test_generate_brief_calls_anthropic_compatible_messages_api(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):
+    def fake_urlopen(request, timeout, **kwargs):
         captured["url"] = request.full_url
         captured["headers"] = dict(request.header_items())
         captured["payload"] = json.loads(request.data)
@@ -155,6 +155,7 @@ def test_generate_brief_calls_anthropic_compatible_messages_api(
         "Anthropic-version": "2023-06-01",
         "Content-type": "application/json",
         "X-api-key": "secret-key",
+        "User-agent": "PaymentDashboard/0.1",
     }
     assert captured["payload"] == {
         "model": "mimo-2.5-pro",
@@ -169,7 +170,7 @@ def test_generate_brief_honors_environment_overrides(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):
+    def fake_urlopen(request, timeout, **kwargs):
         captured["url"] = request.full_url
         captured["payload"] = json.loads(request.data)
         return BytesIO(b'{"content":[{"type":"text","text":"Brief"}]}')
@@ -191,7 +192,7 @@ def test_generate_brief_loads_settings_from_dotenv(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_urlopen(request, timeout):
+    def fake_urlopen(request, timeout, **kwargs):
         captured["url"] = request.full_url
         captured["headers"] = dict(request.header_items())
         captured["payload"] = json.loads(request.data)
@@ -238,7 +239,7 @@ def test_generate_brief_reports_unavailable_provider(
     monkeypatch: pytest.MonkeyPatch,
     error: Exception,
 ) -> None:
-    def fail_urlopen(request, timeout):
+    def fail_urlopen(request, timeout, **kwargs):
         raise error
 
     monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)
@@ -267,7 +268,7 @@ def test_generate_brief_rejects_invalid_responses(
 ) -> None:
     monkeypatch.setattr(
         "urllib.request.urlopen",
-        lambda request, timeout: BytesIO(response),
+        lambda request, timeout, **kwargs: BytesIO(response),
     )
 
     with pytest.raises(AIBriefError, match=message):
@@ -281,7 +282,7 @@ def test_generate_brief_rejects_invalid_responses(
 def test_generate_brief_reports_http_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fail_urlopen(request, timeout):
+    def fail_urlopen(request, timeout, **kwargs):
         raise HTTPError(request.full_url, 500, "server error", {}, None)
 
     monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)

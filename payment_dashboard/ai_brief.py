@@ -5,10 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import ssl
 import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+
+try:
+    import certifi
+
+    _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _SSL_CONTEXT = ssl.create_default_context()
 
 import pandas as pd
 from dotenv import dotenv_values
@@ -153,12 +161,17 @@ def generate_brief(
             "Content-Type": "application/json",
             "x-api-key": resolved_key,
             "anthropic-version": ANTHROPIC_VERSION,
+            "User-Agent": "PaymentDashboard/0.1",
         },
         method="POST",
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=timeout,
+            context=_SSL_CONTEXT,
+        ) as response:
             raw_response = response.read().decode("utf-8")
     except HTTPError as exc:
         raise AIBriefError(f"AI provider returned HTTP {exc.code}.") from exc
