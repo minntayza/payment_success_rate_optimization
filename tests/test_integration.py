@@ -1,10 +1,13 @@
 """Integration tests exercising the full data → analytics → alerting pipeline."""
+
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import pytest
+from streamlit.testing.v1 import AppTest
 
 from payment_dashboard.alerting import evaluate_alerts
 from payment_dashboard.analytics import (
@@ -17,9 +20,24 @@ from payment_dashboard.app import build_dashboard_state
 from payment_dashboard.data_loader import load_transactions
 from payment_dashboard.prepare_data import assign_gateways
 
+
+def test_language_toggle_translates_app_and_keeps_gateway_values() -> None:
+    app_path = Path(__file__).parents[1] / "payment_dashboard" / "app.py"
+    app = AppTest.from_file(str(app_path)).run(timeout=10)
+    english_gateway_options = app.sidebar.multiselect[0].options
+
+    assert app.title[0].value == "Payment Success Monitor"
+
+    app.toggle[0].set_value(True).run(timeout=10)
+
+    assert app.title[0].value == "ငွေပေးချေမှု အောင်မြင်နှုန်း စောင့်ကြည့်စနစ်"
+    assert app.sidebar.multiselect[0].options == english_gateway_options
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_transactions(n: int = 200, seed: int = 99) -> pd.DataFrame:
     """Build a realistic transaction frame with gateway labels."""
@@ -28,10 +46,16 @@ def _make_transactions(n: int = 200, seed: int = 99) -> pd.DataFrame:
     success_count = int(n * 0.7)
     fail_count = n - success_count
     statuses = ["Success"] * success_count + ["Failed"] * fail_count
-    types = (["Transfer"] * max(1, n // 3) + ["Deposit"] * max(1, n // 3)
-             + ["Withdrawal"] * (n - 2 * max(1, n // 3)))
-    devices = (["Mobile"] * max(1, n // 2) + ["Desktop"] * max(1, n // 3)
-               + ["Tablet"] * (n - max(1, n // 2) - max(1, n // 3)))
+    types = (
+        ["Transfer"] * max(1, n // 3)
+        + ["Deposit"] * max(1, n // 3)
+        + ["Withdrawal"] * (n - 2 * max(1, n // 3))
+    )
+    devices = (
+        ["Mobile"] * max(1, n // 2)
+        + ["Desktop"] * max(1, n // 3)
+        + ["Tablet"] * (n - max(1, n // 2) - max(1, n // 3))
+    )
     fraud_count = min(5, n)
     frame = pd.DataFrame(
         {
@@ -57,6 +81,7 @@ def _make_transactions(n: int = 200, seed: int = 99) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Full pipeline tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class TestFullPipeline:
@@ -119,7 +144,9 @@ class TestFullPipeline:
         full = _make_transactions(200)
         # Build a frame spanning multiple days so date filter actually cuts rows
         full["Timestamp"] = pd.date_range(
-            "2025-06-01", periods=200, freq="30min",
+            "2025-06-01",
+            periods=200,
+            freq="30min",
         )
         state = build_dashboard_state(
             full_frame=full,
@@ -138,6 +165,7 @@ class TestFullPipeline:
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class TestEdgeCases:
@@ -228,6 +256,7 @@ class TestEdgeCases:
 # Analytics pipeline
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.integration
 class TestAnalyticsPipeline:
     """Verify analytics functions compose correctly on larger data."""
@@ -299,13 +328,17 @@ class TestAnalyticsPipeline:
         summary = gateway_summary(state.display_frame)
         assert len(summary) == 4
         assert set(summary["Bank Gateway"]) == {
-            "Gateway A", "Gateway B", "Gateway C", "Gateway D",
+            "Gateway A",
+            "Gateway B",
+            "Gateway C",
+            "Gateway D",
         }
 
 
 # ---------------------------------------------------------------------------
 # Data loader integration
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.integration
 class TestDataLoaderIntegration:
@@ -333,6 +366,8 @@ class TestDataLoaderIntegration:
 
         assert len(loaded) == 4
         assert "Bank Gateway" in loaded.columns
-        assert loaded["Bank Gateway"].isin(
-            ["Gateway A", "Gateway B", "Gateway C", "Gateway D"]
-        ).all()
+        assert (
+            loaded["Bank Gateway"]
+            .isin(["Gateway A", "Gateway B", "Gateway C", "Gateway D"])
+            .all()
+        )

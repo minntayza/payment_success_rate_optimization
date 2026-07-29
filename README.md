@@ -17,6 +17,7 @@ be interpreted as measurements of real banks or payment gateways.
 - Chronological transaction replay
 - Latest-50 rolling gateway monitoring
 - Alerts for drops of at least 10 percentage points below baseline
+- Top-of-page English/မြန်မာ language switch
 - Interactive Plotly charts and recent-transaction investigation
 
 ## Requirements
@@ -76,15 +77,17 @@ automatically. Stop the server with `Ctrl+C`.
 
 ## Use the dashboard
 
-1. Move the replay slider to control how many chronological transactions have
+1. Use the English/မြန်မာ switch above the title to choose the dashboard
+   language. Gateway names and transaction category values remain unchanged.
+2. Move the replay slider to control how many chronological transactions have
    arrived.
-2. Use sidebar filters to narrow the displayed KPIs, charts, and transaction
+3. Use sidebar filters to narrow the displayed KPIs, charts, and transaction
    table.
-3. Review Gateway Health to compare each baseline with its latest 50 replayed
+4. Review Gateway Health to compare each baseline with its latest 50 replayed
    transactions.
-4. Use Failure Analysis to investigate patterns by fraud flag, latency band,
+5. Use Failure Analysis to investigate patterns by fraud flag, latency band,
    device, and transaction type.
-5. Use Recent Transactions to inspect individual records.
+6. Use Recent Transactions to inspect individual records.
 
 Display filters do not change alert calculations. Alerts always use the
 unfiltered chronological replay stream.

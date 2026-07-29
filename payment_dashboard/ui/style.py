@@ -1,10 +1,14 @@
 """Page-level CSS and theming."""
+
 from __future__ import annotations
 
 import streamlit as st
 
 PAGE_CSS = """
 <style>
+html, body, [class*="css"] {
+    font-family: Inter, "Noto Sans Myanmar", "Myanmar Text", sans-serif;
+}
 .stApp {
     background:
         radial-gradient(circle at 90% 0%, rgba(37, 99, 235, 0.10), transparent 30rem),

@@ -7,11 +7,16 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
+import streamlit as st
 from pytest import MonkeyPatch, fixture
 from streamlit.testing.v1 import AppTest
 
 from payment_dashboard.alerting import evaluate_alerts
-from payment_dashboard.app import build_dashboard_state
+from payment_dashboard.app import (
+    _render_language_toggle,
+    _render_sidebar,
+    build_dashboard_state,
+)
 from payment_dashboard.models import DashboardState
 from payment_dashboard.ui.sections import (
     render_gateway_health,
@@ -32,6 +37,29 @@ def dashboard_fixture(sample_transactions: pd.DataFrame) -> pd.DataFrame:
         f"Gateway {chr(65 + (index % 4))}" for index in range(len(full))
     ]
     return full
+
+
+def test_language_toggle_defaults_to_english(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(st, "toggle", lambda *_, **kwargs: kwargs["value"])
+
+    assert _render_language_toggle() == "en"
+
+
+def test_burmese_mode_keeps_neutral_filter_values(
+    monkeypatch: pytest.MonkeyPatch, sample_transactions: pd.DataFrame
+) -> None:
+    full_frame = dashboard_fixture(sample_transactions)
+    multiselect = MagicMock(return_value=[])
+    monkeypatch.setattr(st.sidebar, "multiselect", multiselect)
+    monkeypatch.setattr(st.sidebar, "slider", lambda *_, **kwargs: kwargs["value"])
+    monkeypatch.setattr(st.sidebar, "date_input", lambda *_, **kwargs: kwargs["value"])
+
+    _render_sidebar(full_frame, language="my")
+
+    gateway_options = multiselect.call_args_list[0].args[1]
+    assert "Gateway A" in gateway_options
 
 
 @pytest.mark.integration
