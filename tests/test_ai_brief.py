@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from io import BytesIO
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 import pandas as pd
@@ -184,9 +185,43 @@ def test_generate_brief_honors_environment_overrides(
     assert captured["payload"]["model"] == "test-model"
 
 
+def test_generate_brief_loads_settings_from_dotenv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["headers"] = dict(request.header_items())
+        captured["payload"] = json.loads(request.data)
+        return BytesIO(b'{"content":[{"type":"text","text":"Brief"}]}')
+
+    for name in ("ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    (tmp_path / ".env").write_text(
+        "ANTHROPIC_BASE_URL=https://dotenv.example\n"
+        "ANTHROPIC_API_KEY=dotenv-secret\n"
+        "ANTHROPIC_MODEL=mimo-2.5-pro\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    assert (
+        generate_brief(build_brief_facts(brief_transactions(), alert_snapshot()))
+        == "Brief"
+    )
+    assert captured["url"] == "https://dotenv.example/v1/messages"
+    assert captured["headers"]["X-api-key"] == "dotenv-secret"
+    assert captured["payload"]["model"] == "mimo-2.5-pro"
+
+
 def test_generate_brief_requires_base_url_and_api_key(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 

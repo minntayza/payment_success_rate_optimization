@@ -7,9 +7,11 @@ import json
 import os
 import urllib.request
 from collections.abc import Mapping
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 import pandas as pd
+from dotenv import dotenv_values
 
 from payment_dashboard.analytics import (
     failure_breakdown,
@@ -115,9 +117,25 @@ def generate_brief(
     timeout: float = 30.0,
 ) -> str:
     """Generate an English brief through an Anthropic-compatible Messages API."""
-    resolved_url = (base_url or os.getenv("ANTHROPIC_BASE_URL", "")).rstrip("/")
-    resolved_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
-    resolved_model = model or os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL)
+    dotenv = dotenv_values(Path.cwd() / ".env")
+    resolved_url = (
+        base_url
+        or os.getenv("ANTHROPIC_BASE_URL")
+        or dotenv.get("ANTHROPIC_BASE_URL")
+        or ""
+    ).rstrip("/")
+    resolved_key = (
+        api_key
+        or os.getenv("ANTHROPIC_API_KEY")
+        or dotenv.get("ANTHROPIC_API_KEY")
+        or ""
+    )
+    resolved_model = (
+        model
+        or os.getenv("ANTHROPIC_MODEL")
+        or dotenv.get("ANTHROPIC_MODEL")
+        or DEFAULT_ANTHROPIC_MODEL
+    )
     if not resolved_url:
         raise AIBriefError("Set ANTHROPIC_BASE_URL before generating an AI brief.")
     if not resolved_key:
