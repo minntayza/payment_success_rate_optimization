@@ -2,27 +2,43 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
-import sys
 from datetime import date
 from pathlib import Path
 
-# Ensure the project root is on sys.path so the package is importable
-# even when Streamlit Cloud runs this file directly.
-_project_root = str(Path(__file__).resolve().parent.parent)
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
+# When Streamlit Cloud runs this file directly, payment_dashboard is not
+# an installed package. Load sibling modules by file path to avoid
+# relying on sys.path or package installation.
+_PKG_DIR = Path(__file__).resolve().parent
 
-import pandas as pd
-import streamlit as st
 
-from payment_dashboard.alerting import evaluate_alerts
-from payment_dashboard.analytics import add_latency_band, apply_filters
-from payment_dashboard.config import DEFAULT_DATA_PATH
-from payment_dashboard.data_loader import DataValidationError, load_transactions
-from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
-from payment_dashboard.models import DashboardState
-from payment_dashboard.ui.sections import (
+def _load(name: str):  # noqa: ANN001
+    """Import a sibling module from the payment_dashboard package."""
+    spec = importlib.util.spec_from_file_location(
+        f"payment_dashboard.{name}", _PKG_DIR / f"{name}.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# Pre-load modules that app.py imports, so they register as
+# payment_dashboard.X in sys.modules before the main imports below.
+for _name in ("config", "models", "i18n", "data_loader", "analytics", "alerting"):
+    _load(_name)
+
+# Now the normal imports work because the modules are in sys.modules.
+import pandas as pd  # noqa: E402
+import streamlit as st  # noqa: E402
+
+from payment_dashboard.alerting import evaluate_alerts  # noqa: E402
+from payment_dashboard.analytics import add_latency_band, apply_filters  # noqa: E402
+from payment_dashboard.config import DEFAULT_DATA_PATH  # noqa: E402
+from payment_dashboard.data_loader import DataValidationError, load_transactions  # noqa: E402
+from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate  # noqa: E402
+from payment_dashboard.models import DashboardState  # noqa: E402
+from payment_dashboard.ui.sections import (  # noqa: E402
     render_ai_operations_brief,
     render_failure_analysis,
     render_gateway_health,
@@ -32,7 +48,7 @@ from payment_dashboard.ui.sections import (
     render_recent_transactions,
     render_success_trend,
 )
-from payment_dashboard.ui.style import apply_page_style
+from payment_dashboard.ui.style import apply_page_style  # noqa: E402
 
 
 def build_dashboard_state(
