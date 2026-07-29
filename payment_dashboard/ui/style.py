@@ -39,6 +39,28 @@ h1, h2, h3 {
     color: #0f172a;
     letter-spacing: -0.02em;
 }
+.st-key-ai_brief_result,
+.st-key-ai_brief_result p,
+.st-key-ai_brief_result li,
+.st-key-ai_brief_result strong,
+.st-key-ai_brief_result em {
+    color: #1e293b !important;
+}
+.st-key-ai_brief_result h1,
+.st-key-ai_brief_result h2,
+.st-key-ai_brief_result h3,
+.st-key-ai_brief_result h4,
+.st-key-ai_brief_result h5,
+.st-key-ai_brief_result h6 {
+    color: #0f172a !important;
+}
+.st-key-ai_brief_result a {
+    color: #1d4ed8 !important;
+}
+.st-key-ai_brief_result code {
+    color: #7c2d12 !important;
+    background: #fff7ed;
+}
 [data-testid="stVerticalBlockBorderWrapper"]:has(
     input[aria-label="Language / ဘာသာစကား"]
 ) {

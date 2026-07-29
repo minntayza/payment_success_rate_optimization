@@ -283,12 +283,19 @@ def test_ai_brief_click_stores_text_and_evidence(
     session: dict[str, object] = {}
     markdown: list[str] = []
     evidence: list[object] = []
+    container_keys: list[str | None] = []
+
+    def capture_container(*_, **kwargs):
+        container_keys.append(kwargs.get("key"))
+        return nullcontext()
+
     monkeypatch.setattr(sections_module.st, "session_state", session)
     monkeypatch.setattr(sections_module.st, "subheader", lambda *_: None)
     monkeypatch.setattr(sections_module.st, "caption", lambda *_: None)
     monkeypatch.setattr(sections_module.st, "button", lambda *_, **__: True)
     monkeypatch.setattr(sections_module.st, "spinner", lambda *_: nullcontext())
     monkeypatch.setattr(sections_module.st, "markdown", markdown.append)
+    monkeypatch.setattr(sections_module.st, "container", capture_container)
     monkeypatch.setattr(sections_module.st, "expander", lambda *_: nullcontext())
     monkeypatch.setattr(sections_module.st, "json", evidence.append)
     monkeypatch.setattr(sections_module, "generate_brief", lambda facts: "AI result")
@@ -298,6 +305,7 @@ def test_ai_brief_click_stores_text_and_evidence(
     assert session["ai_brief_text"] == "AI result"
     assert session["ai_brief_fingerprint"]
     assert markdown == ["AI result"]
+    assert container_keys == ["ai_brief_result"]
     assert evidence and evidence[0]["transaction_count"] == len(
         dashboard_state.display_frame
     )

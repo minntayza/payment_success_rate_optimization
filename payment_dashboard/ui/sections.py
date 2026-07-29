@@ -83,7 +83,8 @@ def render_ai_operations_brief(state: DashboardState) -> None:
 
     brief_text = st.session_state.get(AI_BRIEF_TEXT_KEY)
     if isinstance(brief_text, str):
-        st.markdown(brief_text)
+        with st.container(key="ai_brief_result"):
+            st.markdown(brief_text)
         with st.expander("Evidence sent to the AI model"):
             st.json(facts)
 
