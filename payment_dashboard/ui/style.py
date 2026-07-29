@@ -10,9 +10,7 @@ html, body, [class*="css"] {
     font-family: Inter, "Noto Sans Myanmar", "Myanmar Text", sans-serif;
 }
 .stApp {
-    background:
-        radial-gradient(circle at 90% 0%, rgba(37, 99, 235, 0.10), transparent 30rem),
-        #f7f9fc;
+    background: #ffffff;
 }
 .block-container {
     max-width: 1440px;
@@ -45,13 +43,10 @@ h1, h2, h3 {
     input[aria-label="Language / ဘာသာစကား"]
 ) {
     --language-accent: #2563EB;
-    border-color: color-mix(in srgb, var(--language-accent) 45%, transparent);
-    border-left: 4px solid var(--language-accent);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--language-accent) 7%, transparent);
-    box-shadow: 0 5px 18px rgba(15, 23, 42, 0.06);
-    padding: 0.2rem;
-    transition: border-color 160ms ease, background-color 160ms ease;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
 }
 [data-testid="stVerticalBlockBorderWrapper"]:has(
     input[aria-label="Language / ဘာသာစကား"]:checked
@@ -68,13 +63,6 @@ h1, h2, h3 {
 ) label[data-baseweb="checkbox"] > div:first-child {
     outline: 3px solid color-mix(in srgb, var(--language-accent) 45%, transparent);
     outline-offset: 3px;
-}
-@media (prefers-color-scheme: dark) {
-    [data-testid="stVerticalBlockBorderWrapper"]:has(
-        input[aria-label="Language / ဘာသာစကား"]
-    ) {
-        background: color-mix(in srgb, var(--language-accent) 13%, transparent);
-    }
 }
 </style>
 """
