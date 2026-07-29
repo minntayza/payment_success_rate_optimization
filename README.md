@@ -18,11 +18,13 @@ be interpreted as measurements of real banks or payment gateways.
 - Latest-50 rolling gateway monitoring
 - Alerts for drops of at least 10 percentage points below baseline
 - Top-of-page English/မြန်မာ language switch
+- Button-triggered English AI Operations Brief generated locally with Ollama
 - Interactive Plotly charts and recent-transaction investigation
 
 ## Requirements
 
 - Python 3.11 or newer
+- [Ollama](https://ollama.com/) for the optional local AI brief
 - The source file `transaction_data.csv`
 
 ## Setup
@@ -45,6 +47,31 @@ python3 -m venv .venv
 
 The CSV files under `data/raw/` and `data/processed/` are intentionally ignored
 by Git.
+
+### Prepare the optional local AI model
+
+No API key or paid cloud API is required. Download the recommended model once:
+
+```bash
+ollama pull llama3.2:1b
+```
+
+Ollama normally starts its local service automatically. If it is not running:
+
+```bash
+ollama serve
+```
+
+The dashboard calls `http://127.0.0.1:11434` by default. To use another local
+endpoint or model, copy `.env.example` values into your shell environment:
+
+```bash
+export OLLAMA_URL=http://127.0.0.1:11434
+export OLLAMA_MODEL=llama3.2:1b
+```
+
+Only aggregate metrics are sent to the local model. Raw transaction rows,
+transaction IDs, timestamps, and individual amounts are excluded.
 
 ## Prepare the dataset
 
@@ -71,7 +98,7 @@ make test
 ## Start the web app
 
 ```bash
-make run
+ARROW_DEFAULT_MEMORY_POOL=system make run
 ```
 
 Open [http://localhost:8501](http://localhost:8501) if the browser does not open
@@ -85,11 +112,19 @@ automatically. Stop the server with `Ctrl+C`.
    arrived.
 3. Use sidebar filters to narrow the displayed KPIs, charts, and transaction
    table.
-4. Review Gateway Health to compare each baseline with its latest 50 replayed
+4. Click **Generate AI Brief** for an English summary of the current filtered
+   view. The output is retained until the underlying metrics change.
+5. Expand **Evidence used by the local model** to compare the generated text
+   with the exact aggregate facts supplied to Ollama.
+6. Review Gateway Health to compare each baseline with its latest 50 replayed
    transactions.
-5. Use Failure Analysis to investigate patterns by fraud flag, latency band,
+7. Use Failure Analysis to investigate patterns by fraud flag, latency band,
    device, and transaction type.
-6. Use Recent Transactions to inspect individual records.
+8. Use Recent Transactions to inspect individual records.
+
+The AI brief is English-only, uses simulated gateway data, and is not real
+financial or routing advice. If Ollama is unavailable, the dashboard shows the
+commands needed to start the service and download the configured model.
 
 Display filters do not change alert calculations. Alerts always use the
 unfiltered chronological replay stream.
