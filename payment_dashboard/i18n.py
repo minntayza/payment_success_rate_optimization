@@ -87,6 +87,11 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "No transactions match the selected filters. Clear one or more "
             "sidebar filters to continue."
         ),
+        "errors.load_data": "Unable to load dashboard data: {exc}",
+        "errors.prepare_data_guidance": (
+            "Generate the prepared dataset with "
+            "`python -m payment_dashboard.prepare_data` and refresh this page."
+        ),
         "test.fallback": "Fallback",
     },
     "my": {
@@ -162,6 +167,11 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "errors.no_matching_transactions": (
             "ရွေးချယ်ထားသော စစ်ထုတ်မှုများနှင့် ကိုက်ညီသော ငွေပေးချေမှုမရှိပါ။ ဆက်လက်ရန် "
             "ဘေးဘားစစ်ထုတ်မှုတစ်ခု သို့မဟုတ် တစ်ခုထက်ပို၍ ရှင်းလင်းပါ။"
+        ),
+        "errors.load_data": "Dashboard data ကို မဖွင့်နိုင်ပါ: {exc}",
+        "errors.prepare_data_guidance": (
+            "`python -m payment_dashboard.prepare_data` ဖြင့် ပြင်ဆင်ထားသော dataset ကို "
+            "ဖန်တီးပြီး ဤစာမျက်နှာကို ပြန်လည်ဖွင့်ပါ။"
         ),
         "test.fallback": "",
     },
