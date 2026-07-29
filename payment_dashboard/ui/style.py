@@ -59,6 +59,14 @@ h1, h2, h3 {
     background-color: var(--language-accent) !important;
 }
 [data-testid="stVerticalBlockBorderWrapper"]:has(
+    input[aria-label="Language / ဘာသာစကား"]
+) [data-testid="stWidgetLabel"],
+[data-testid="stVerticalBlockBorderWrapper"]:has(
+    input[aria-label="Language / ဘာသာစကား"]
+) [data-testid="stCaptionContainer"] {
+    color: #0f172a !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:has(
     input[aria-label="Language / ဘာသာစကား"]:focus-visible
 ) label[data-baseweb="checkbox"] > div:first-child {
     outline: 3px solid color-mix(in srgb, var(--language-accent) 45%, transparent);
