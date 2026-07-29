@@ -14,7 +14,7 @@ from streamlit.testing.v1 import AppTest
 
 import payment_dashboard.app as app_module
 import payment_dashboard.ui.sections as sections_module
-from payment_dashboard.ai_brief import AIBriefError, OllamaUnavailableError
+from payment_dashboard.ai_brief import AIBriefError
 from payment_dashboard.alerting import evaluate_alerts
 from payment_dashboard.app import (
     _render_language_toggle,
@@ -330,11 +330,11 @@ def test_ai_brief_invalidates_stale_text(
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
-        (OllamaUnavailableError("run ollama serve"), "run ollama serve"),
-        (AIBriefError("bad local response"), "bad local response"),
+        (AIBriefError("missing ANTHROPIC_API_KEY"), "missing ANTHROPIC_API_KEY"),
+        (AIBriefError("bad provider response"), "bad provider response"),
     ],
 )
-def test_ai_brief_shows_local_generation_errors(
+def test_ai_brief_shows_generation_errors(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
     error: AIBriefError,

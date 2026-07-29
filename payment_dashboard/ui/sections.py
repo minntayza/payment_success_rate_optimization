@@ -50,10 +50,10 @@ AI_BRIEF_FINGERPRINT_KEY = "ai_brief_fingerprint"
 
 
 def render_ai_operations_brief(state: DashboardState) -> None:
-    """Render button-triggered English analysis from aggregate local facts."""
+    """Render button-triggered English analysis from aggregate facts."""
     st.subheader("AI Operations Brief")
     st.caption(
-        "Generate an English summary with a local Ollama model. "
+        "Generate an English summary with MiMo 2.5 Pro. "
         "Only aggregate dashboard metrics are shared."
     )
     facts = build_brief_facts(state.display_frame, state.alerts)
@@ -73,7 +73,7 @@ def render_ai_operations_brief(state: DashboardState) -> None:
 
     if generate:
         try:
-            with st.spinner("Generating locally with Ollama..."):
+            with st.spinner("Generating AI brief..."):
                 brief = generate_brief(facts)
         except AIBriefError as exc:
             st.error(str(exc))
@@ -84,7 +84,7 @@ def render_ai_operations_brief(state: DashboardState) -> None:
     brief_text = st.session_state.get(AI_BRIEF_TEXT_KEY)
     if isinstance(brief_text, str):
         st.markdown(brief_text)
-        with st.expander("Evidence used by the local model"):
+        with st.expander("Evidence sent to the AI model"):
             st.json(facts)
 
 

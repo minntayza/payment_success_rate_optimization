@@ -1,4 +1,4 @@
-"""Aggregate dashboard facts and generate an operations brief locally."""
+"""Aggregate dashboard facts and generate an operations brief."""
 
 from __future__ import annotations
 
@@ -17,16 +17,12 @@ from payment_dashboard.analytics import (
     summary_metrics,
 )
 
-DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
-DEFAULT_OLLAMA_MODEL = "llama3.2:1b"
+DEFAULT_ANTHROPIC_MODEL = "mimo-2.5-pro"
+ANTHROPIC_VERSION = "2023-06-01"
 
 
 class AIBriefError(RuntimeError):
-    """Raised when a local AI brief cannot be generated safely."""
-
-
-class OllamaUnavailableError(AIBriefError):
-    """Raised when the local Ollama service cannot be reached."""
+    """Raised when an AI brief cannot be generated safely."""
 
 
 def _top_failure(
@@ -114,21 +110,32 @@ def generate_brief(
     facts: Mapping[str, object],
     *,
     base_url: str | None = None,
+    api_key: str | None = None,
     model: str | None = None,
     timeout: float = 30.0,
 ) -> str:
-    """Generate an English operations brief through a local Ollama service."""
-    resolved_url = (base_url or os.getenv("OLLAMA_URL", DEFAULT_OLLAMA_URL)).rstrip("/")
-    resolved_model = model or os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+    """Generate an English brief through an Anthropic-compatible Messages API."""
+    resolved_url = (base_url or os.getenv("ANTHROPIC_BASE_URL", "")).rstrip("/")
+    resolved_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
+    resolved_model = model or os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL)
+    if not resolved_url:
+        raise AIBriefError("Set ANTHROPIC_BASE_URL before generating an AI brief.")
+    if not resolved_key:
+        raise AIBriefError("Set ANTHROPIC_API_KEY before generating an AI brief.")
+
     payload = {
         "model": resolved_model,
-        "prompt": build_brief_prompt(facts),
-        "stream": False,
+        "max_tokens": 700,
+        "messages": [{"role": "user", "content": build_brief_prompt(facts)}],
     }
     request = urllib.request.Request(
-        f"{resolved_url}/api/generate",
+        f"{resolved_url}/v1/messages",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": resolved_key,
+            "anthropic-version": ANTHROPIC_VERSION,
+        },
         method="POST",
     )
 
@@ -136,21 +143,30 @@ def generate_brief(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             raw_response = response.read().decode("utf-8")
     except HTTPError as exc:
-        raise AIBriefError(f"Ollama returned HTTP {exc.code}.") from exc
+        raise AIBriefError(f"AI provider returned HTTP {exc.code}.") from exc
     except (URLError, TimeoutError) as exc:
-        raise OllamaUnavailableError(
-            f"Local Ollama is unavailable. Run `ollama serve` and "
-            f"`ollama pull {resolved_model}`."
+        raise AIBriefError(
+            "AI provider is unavailable. Check ANTHROPIC_BASE_URL and your network."
         ) from exc
 
     try:
         decoded = json.loads(raw_response)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise AIBriefError("Ollama returned invalid JSON.") from exc
+        raise AIBriefError("AI provider returned invalid JSON.") from exc
 
-    if "response" not in decoded:
-        raise AIBriefError("Ollama response is missing generated text.")
-    text = decoded["response"]
-    if not isinstance(text, str) or not text.strip():
-        raise AIBriefError("Ollama returned an empty response.")
-    return text.strip()
+    if "content" not in decoded:
+        raise AIBriefError("AI provider response is missing generated content.")
+    content = decoded["content"]
+    if not isinstance(content, list):
+        raise AIBriefError("AI provider returned invalid content.")
+    text_blocks = [
+        block["text"].strip()
+        for block in content
+        if isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+        and block["text"].strip()
+    ]
+    if not text_blocks:
+        raise AIBriefError("AI provider returned an empty response.")
+    return "\n\n".join(text_blocks)
