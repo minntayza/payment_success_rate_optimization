@@ -61,6 +61,11 @@ h1, h2, h3 {
     color: #7c2d12 !important;
     background: #fff7ed;
 }
+[data-testid="stAlert"],
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] li {
+    color: #0f172a !important;
+}
 [data-testid="stVerticalBlockBorderWrapper"]:has(
     input[aria-label="Language / ဘာသာစကား"]
 ) {
