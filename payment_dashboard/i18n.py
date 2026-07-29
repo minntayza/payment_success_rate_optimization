@@ -74,6 +74,14 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "Break down failed transactions to identify recurring patterns."
         ),
         "table.gateway": "Gateway",
+        "table.transaction_id": "Transaction ID",
+        "table.timestamp": "Timestamp",
+        "table.transaction_type": "Transaction Type",
+        "table.transaction_status": "Transaction Status",
+        "table.transaction_amount": "Transaction Amount",
+        "table.device_used": "Device Used",
+        "table.latency_ms": "Latency (ms)",
+        "table.fraud_flag": "Fraud Flag",
         "table.recent_transactions": "Recent transactions",
         "guide.title": "How to interpret this dashboard",
         "guide.content": (
@@ -157,6 +165,14 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "ထပ်တလဲလဲ ဖြစ်ပေါ်နေသော ပုံစံများကို ရှာဖွေရန် မအောင်မြင်သော ငွေပေးချေမှုများကို ခွဲခြမ်းပါ။"
         ),
         "table.gateway": "ဂိတ်ဝေး",
+        "table.transaction_id": "ငွေပေးချေမှု ID",
+        "table.timestamp": "အချိန်မှတ်တမ်း",
+        "table.transaction_type": "ငွေပေးချေမှု အမျိုးအစား",
+        "table.transaction_status": "ငွေပေးချေမှု အခြေအနေ",
+        "table.transaction_amount": "ငွေပမာဏ",
+        "table.device_used": "အသုံးပြုသည့် စက်",
+        "table.latency_ms": "တုံ့ပြန်ချိန် (ms)",
+        "table.fraud_flag": "လိမ်လည်မှု အမှတ်အသား",
         "table.recent_transactions": "နောက်ဆုံး ငွေပေးချေမှုများ",
         "guide.title": "ဤ dashboard ကို နားလည်ရန်",
         "guide.content": (

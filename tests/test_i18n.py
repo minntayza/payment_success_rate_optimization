@@ -1,5 +1,7 @@
 """Tests for the dashboard translation catalog."""
 
+import pytest
+
 from payment_dashboard.i18n import (
     DEFAULT_LANGUAGE,
     SUPPORTED_LANGUAGES,
@@ -47,3 +49,33 @@ def test_burmese_gateway_success_chart_label_matches_the_ui_contract() -> None:
 def test_gateway_table_header_is_translated() -> None:
     assert translate("table.gateway") == "Gateway"
     assert translate("table.gateway", "my") == "ဂိတ်ဝေး"
+
+
+@pytest.mark.parametrize(
+    ("key", "english", "burmese"),
+    [
+        ("table.transaction_id", "Transaction ID", "ငွေပေးချေမှု ID"),
+        ("table.timestamp", "Timestamp", "အချိန်မှတ်တမ်း"),
+        (
+            "table.transaction_type",
+            "Transaction Type",
+            "ငွေပေးချေမှု အမျိုးအစား",
+        ),
+        (
+            "table.transaction_status",
+            "Transaction Status",
+            "ငွေပေးချေမှု အခြေအနေ",
+        ),
+        ("table.transaction_amount", "Transaction Amount", "ငွေပမာဏ"),
+        ("table.device_used", "Device Used", "အသုံးပြုသည့် စက်"),
+        ("table.latency_ms", "Latency (ms)", "တုံ့ပြန်ချိန် (ms)"),
+        ("table.fraud_flag", "Fraud Flag", "လိမ်လည်မှု အမှတ်အသား"),
+    ],
+)
+def test_recent_transaction_table_headers_are_translated(
+    key: str,
+    english: str,
+    burmese: str,
+) -> None:
+    assert translate(key) == english
+    assert translate(key, "my") == burmese
