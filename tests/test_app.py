@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pandas as pd
+import pytest
 from pytest import MonkeyPatch, fixture
 from streamlit.testing.v1 import AppTest
 
-from payment_dashboard.app import build_dashboard_state
 from payment_dashboard.alerting import evaluate_alerts
+from payment_dashboard.app import build_dashboard_state
 from payment_dashboard.models import DashboardState
 from payment_dashboard.ui.sections import (
     render_gateway_health,
@@ -33,6 +34,7 @@ def dashboard_fixture(sample_transactions: pd.DataFrame) -> pd.DataFrame:
     return full
 
 
+@pytest.mark.integration
 def test_alerts_ignore_display_filters(sample_transactions):
     full = dashboard_fixture(sample_transactions)
 
@@ -47,12 +49,13 @@ def test_alerts_ignore_display_filters(sample_transactions):
         end=None,
     )
 
-    assert len(state["alert_input"]) == 220
-    assert set(state["display_frame"]["Bank Gateway"]) <= {"Gateway D"}
-    assert set(state["display_frame"]["Transaction Status"]) <= {"Failed"}
-    assert state["alerts"]["has_sufficient_history"].all()
+    assert len(state.replay_frame) == 220
+    assert set(state.display_frame["Bank Gateway"]) <= {"Gateway D"}
+    assert set(state.display_frame["Transaction Status"]) <= {"Failed"}
+    assert state.alerts["has_sufficient_history"].all()
 
 
+@pytest.mark.integration
 def test_replay_count_limits_displayed_transactions(sample_transactions):
     full = dashboard_fixture(sample_transactions)
 
@@ -67,12 +70,13 @@ def test_replay_count_limits_displayed_transactions(sample_transactions):
         end=None,
     )
 
-    assert len(state["alert_input"]) == 80
-    assert len(state["display_frame"]) == 80
-    assert "Latency Band" in state["display_frame"]
-    assert not state["alerts"]["has_sufficient_history"].any()
+    assert len(state.replay_frame) == 80
+    assert len(state.display_frame) == 80
+    assert "Latency Band" in state.display_frame
+    assert not state.alerts["has_sufficient_history"].any()
 
 
+@pytest.mark.integration
 def test_streamlit_app_starts_without_exception():
     app_path = Path(__file__).parents[1] / "payment_dashboard" / "app.py"
 
@@ -81,23 +85,11 @@ def test_streamlit_app_starts_without_exception():
     assert not app.exception
 
 
-def test_app_entrypoint_imports_when_project_root_is_not_on_sys_path():
-    project_root = Path(__file__).parents[1]
-    app_path = project_root / "payment_dashboard" / "app.py"
-    script = f"""
-import runpy
-import sys
-
-project_root = {str(project_root)!r}
-sys.path = [
-    {str(app_path.parent)!r},
-    *[entry for entry in sys.path if entry not in ("", project_root)],
-]
-runpy.run_path({str(app_path)!r}, run_name="streamlit_app")
-"""
-
+@pytest.mark.integration
+def test_app_imports_as_installed_package():
+    """Verify app.py works as an installed package (no sys.path hacks)."""
     result = subprocess.run(
-        [sys.executable, "-c", script],
+        [sys.executable, "-c", "from payment_dashboard.app import render_app"],
         capture_output=True,
         text=True,
         check=False,
