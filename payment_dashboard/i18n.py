@@ -147,7 +147,7 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "health.latest_50": "နောက်ဆုံး ၅၀",
         "health.drop": "လျော့ကျမှု",
         "charts.gateway_performance": "Gateway စွမ်းဆောင်ရည်",
-        "charts.success_rate_by_gateway": "Gateway အလိုက် အောင်မြင်နှုန်း",
+        "charts.success_rate_by_gateway": "ဂိတ်ဝေးအလိုက် အောင်မြင်နှုန်း",
         "charts.transaction_volume_by_gateway": "Gateway အလိုက် ငွေပေးချေမှုပမာဏ",
         "charts.success_trend": "အောင်မြင်နှုန်း လမ်းကြောင်း",
         "charts.failures_by": "{title} အလိုက် မအောင်မြင်မှုများ",
