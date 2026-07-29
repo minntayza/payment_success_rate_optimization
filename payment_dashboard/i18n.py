@@ -12,6 +12,8 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "language.label": "Language",
         "language.english": "English",
         "language.burmese": "မြန်မာ",
+        "language.control_label": "Language / ဘာသာစကား",
+        "language.current": "Current: {name}",
         "dashboard.title": "Payment Success Monitor",
         "dashboard.description": (
             "Track transaction health, compare simulated gateways, and investigate "
@@ -113,6 +115,8 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "language.label": "ဘာသာစကား",
         "language.english": "English",
         "language.burmese": "မြန်မာ",
+        "language.control_label": "Language / ဘာသာစကား",
+        "language.current": "လက်ရှိ: {name}",
         "dashboard.title": "ငွေပေးချေမှု အောင်မြင်နှုန်း စောင့်ကြည့်စနစ်",
         "dashboard.description": (
             "ငွေပေးချေမှု အခြေအနေကို စောင့်ကြည့်ပြီး gateway များကို နှိုင်းယှဉ်ကာ "

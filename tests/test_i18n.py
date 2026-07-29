@@ -46,6 +46,13 @@ def test_burmese_gateway_success_chart_label_matches_the_ui_contract() -> None:
     )
 
 
+def test_language_control_copy_is_bilingual() -> None:
+    assert translate("language.control_label", "en") == "Language / ဘာသာစကား"
+    assert translate("language.control_label", "my") == "Language / ဘာသာစကား"
+    assert translate("language.current", "en", name="English") == "Current: English"
+    assert translate("language.current", "my", name="မြန်မာ") == "လက်ရှိ: မြန်မာ"
+
+
 def test_gateway_table_header_is_translated() -> None:
     assert translate("table.gateway") == "Gateway"
     assert translate("table.gateway", "my") == "ဂိတ်ဝေး"
