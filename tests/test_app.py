@@ -3,11 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 import sys
+from unittest.mock import MagicMock
 
 import pandas as pd
+from pytest import MonkeyPatch, fixture
 from streamlit.testing.v1 import AppTest
 
 from payment_dashboard.app import build_dashboard_state
+from payment_dashboard.alerting import evaluate_alerts
+from payment_dashboard.models import DashboardState
+from payment_dashboard.ui.sections import render_gateway_health, render_kpis
 
 
 def dashboard_fixture(sample_transactions: pd.DataFrame) -> pd.DataFrame:
@@ -95,3 +100,37 @@ runpy.run_path({str(app_path)!r}, run_name="streamlit_app")
     )
 
     assert result.returncode == 0, result.stderr
+
+
+@fixture
+def dashboard_state(sample_transactions: pd.DataFrame) -> DashboardState:
+    frame = dashboard_fixture(sample_transactions)
+    alerts = evaluate_alerts(frame, frame)
+    return DashboardState(frame, frame, alerts)
+
+
+def test_kpis_render_burmese_labels(
+    monkeypatch: MonkeyPatch, dashboard_state: DashboardState
+) -> None:
+    columns = [MagicMock() for _ in range(5)]
+    monkeypatch.setattr(
+        "payment_dashboard.ui.sections.st.columns", lambda count: columns
+    )
+
+    render_kpis(dashboard_state, language="my")
+
+    assert columns[0].metric.call_args.args[0] == "ငွေပေးချေမှုများ"
+
+
+def test_gateway_health_keeps_gateway_values(
+    monkeypatch: MonkeyPatch, dashboard_state: DashboardState
+) -> None:
+    captured: list[pd.DataFrame] = []
+    monkeypatch.setattr(
+        "payment_dashboard.ui.sections.st.dataframe",
+        lambda frame, **_: captured.append(frame),
+    )
+
+    render_gateway_health(dashboard_state.alerts, language="my")
+
+    assert set(captured[0]["ဂိတ်ဝေး"]) == set(dashboard_state.alerts["Bank Gateway"])
