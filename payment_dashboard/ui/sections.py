@@ -27,6 +27,17 @@ RECENT_COLUMNS = [
     "Latency (ms)",
     "Fraud Flag",
 ]
+RECENT_COLUMN_KEYS = {
+    "Transaction ID": "table.transaction_id",
+    "Timestamp": "table.timestamp",
+    "Bank Gateway": "table.gateway",
+    "Transaction Type": "table.transaction_type",
+    "Transaction Status": "table.transaction_status",
+    "Transaction Amount": "table.transaction_amount",
+    "Device Used": "table.device_used",
+    "Latency (ms)": "table.latency_ms",
+    "Fraud Flag": "table.fraud_flag",
+}
 
 
 def render_kpis(state: DashboardState, language: str = "en") -> None:
@@ -139,8 +150,15 @@ def render_failure_analysis(frame: pd.DataFrame, language: str = "en") -> None:
 def render_recent_transactions(frame: pd.DataFrame, language: str = "en") -> None:
     """Render the recent transactions table."""
     st.subheader(translate("table.recent_transactions", language))
+    display = frame.sort_values("Timestamp", ascending=False).head(25)[RECENT_COLUMNS]
+    display = display.rename(
+        columns={
+            column: translate(key, language)
+            for column, key in RECENT_COLUMN_KEYS.items()
+        }
+    )
     st.dataframe(
-        frame.sort_values("Timestamp", ascending=False).head(25)[RECENT_COLUMNS],
+        display,
         use_container_width=True,
         hide_index=True,
     )

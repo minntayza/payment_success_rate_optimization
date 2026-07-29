@@ -12,7 +12,11 @@ from streamlit.testing.v1 import AppTest
 from payment_dashboard.app import build_dashboard_state
 from payment_dashboard.alerting import evaluate_alerts
 from payment_dashboard.models import DashboardState
-from payment_dashboard.ui.sections import render_gateway_health, render_kpis
+from payment_dashboard.ui.sections import (
+    render_gateway_health,
+    render_kpis,
+    render_recent_transactions,
+)
 
 
 def dashboard_fixture(sample_transactions: pd.DataFrame) -> pd.DataFrame:
@@ -134,3 +138,46 @@ def test_gateway_health_keeps_gateway_values(
     render_gateway_health(dashboard_state.alerts, language="my")
 
     assert set(captured[0]["ဂိတ်ဝေး"]) == set(dashboard_state.alerts["Bank Gateway"])
+
+
+def test_recent_transactions_localizes_headers_without_changing_values(
+    monkeypatch: MonkeyPatch, dashboard_state: DashboardState
+) -> None:
+    captured: list[pd.DataFrame] = []
+    monkeypatch.setattr(
+        "payment_dashboard.ui.sections.st.dataframe",
+        lambda frame, **_: captured.append(frame),
+    )
+    expected = dashboard_state.display_frame.sort_values(
+        "Timestamp", ascending=False
+    ).head(25)[
+        [
+            "Transaction ID",
+            "Timestamp",
+            "Bank Gateway",
+            "Transaction Type",
+            "Transaction Status",
+            "Transaction Amount",
+            "Device Used",
+            "Latency (ms)",
+            "Fraud Flag",
+        ]
+    ]
+
+    render_recent_transactions(dashboard_state.display_frame, language="my")
+
+    displayed = captured[0]
+    assert list(displayed.columns) == [
+        "ငွေပေးချေမှု ID",
+        "အချိန်မှတ်တမ်း",
+        "ဂိတ်ဝေး",
+        "ငွေပေးချေမှု အမျိုးအစား",
+        "ငွေပေးချေမှု အခြေအနေ",
+        "ငွေပမာဏ",
+        "အသုံးပြုသည့် စက်",
+        "တုံ့ပြန်ချိန် (ms)",
+        "လိမ်လည်မှု အမှတ်အသား",
+    ]
+    pd.testing.assert_frame_equal(
+        displayed.set_axis(expected.columns, axis="columns"), expected
+    )
