@@ -51,6 +51,7 @@ from payment_dashboard.data_loader import (  # noqa: E402
     DataValidationError,
     load_transactions,
 )
+from payment_dashboard.demo_data import generate_demo_transactions  # noqa: E402
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate  # noqa: E402
 from payment_dashboard.models import DashboardState  # noqa: E402
 from payment_dashboard.ui.sections import (  # noqa: E402
@@ -112,6 +113,8 @@ def _render_language_toggle() -> Language:
 def _load_data(language: Language = DEFAULT_LANGUAGE) -> pd.DataFrame:
     """Load transaction data or show Streamlit error and stop."""
     data_path = Path(os.getenv("PAYMENT_DATA_PATH", str(DEFAULT_DATA_PATH)))
+    if os.getenv("PAYMENT_DEMO_MODE") == "1" and not data_path.is_file():
+        return generate_demo_transactions()
     try:
         return load_transactions(data_path, require_gateway=True)
     except DataValidationError as exc:

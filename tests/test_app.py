@@ -183,6 +183,20 @@ def test_sibling_loader_registers_module_before_execution(
     sys.modules["payment_dashboard.config"] = previous
 
 
+def test_load_data_uses_demo_generator_when_enabled(
+    monkeypatch: MonkeyPatch,
+    sample_transactions: pd.DataFrame,
+) -> None:
+    expected = dashboard_fixture(sample_transactions)
+    monkeypatch.setenv("PAYMENT_DEMO_MODE", "1")
+    monkeypatch.setenv("PAYMENT_DATA_PATH", "/missing/cloud-data.csv")
+    monkeypatch.setattr(app_module, "generate_demo_transactions", lambda: expected)
+
+    loaded = app_module._load_data()
+
+    pd.testing.assert_frame_equal(loaded, expected)
+
+
 @fixture
 def dashboard_state(sample_transactions: pd.DataFrame) -> DashboardState:
     frame = dashboard_fixture(sample_transactions)
