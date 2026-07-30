@@ -13,6 +13,12 @@ from pathlib import Path
 # an installed package. Load sibling modules by file path to avoid
 # relying on sys.path or package installation.
 _PKG_DIR = Path(__file__).resolve().parent
+CLOUD_SETTING_KEYS = (
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL",
+    "PAYMENT_DEMO_MODE",
+)
 
 
 def _load(name: str):  # noqa: ANN001
@@ -123,6 +129,19 @@ def _load_data(language: Language = DEFAULT_LANGUAGE) -> pd.DataFrame:
         st.stop()
 
 
+def _apply_streamlit_secrets() -> None:
+    """Expose approved root-level Streamlit secrets to existing clients."""
+    for key in CLOUD_SETTING_KEYS:
+        if os.getenv(key):
+            continue
+        try:
+            value = st.secrets.get(key)
+        except FileNotFoundError:
+            return
+        if isinstance(value, str) and value:
+            os.environ[key] = value
+
+
 def _persist_sidebar_value(widget_key: str) -> None:
     """Copy a widget value to language-independent session state."""
     st.session_state[f"{widget_key}_value"] = st.session_state[widget_key]
@@ -230,6 +249,7 @@ def render_app() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
+    _apply_streamlit_secrets()
     apply_page_style()
 
     language = _render_language_toggle()

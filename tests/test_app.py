@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from contextlib import nullcontext
@@ -195,6 +196,37 @@ def test_load_data_uses_demo_generator_when_enabled(
     loaded = app_module._load_data()
 
     pd.testing.assert_frame_equal(loaded, expected)
+
+
+def test_streamlit_secrets_populate_known_environment_settings(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    for key in (
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_MODEL",
+        "PAYMENT_DEMO_MODE",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(
+        app_module.st,
+        "secrets",
+        {
+            "ANTHROPIC_BASE_URL": "https://provider.example",
+            "ANTHROPIC_API_KEY": "secret",
+            "ANTHROPIC_MODEL": "mimo-2.5-pro",
+            "PAYMENT_DEMO_MODE": "1",
+            "UNRELATED_SECRET": "ignored",
+        },
+    )
+
+    app_module._apply_streamlit_secrets()
+
+    assert os.environ["ANTHROPIC_BASE_URL"] == "https://provider.example"
+    assert os.environ["ANTHROPIC_API_KEY"] == "secret"
+    assert os.environ["ANTHROPIC_MODEL"] == "mimo-2.5-pro"
+    assert os.environ["PAYMENT_DEMO_MODE"] == "1"
+    assert "UNRELATED_SECRET" not in os.environ
 
 
 @fixture
