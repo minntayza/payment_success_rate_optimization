@@ -171,6 +171,18 @@ def test_app_imports_as_installed_package():
     assert result.returncode == 0, result.stderr
 
 
+def test_sibling_loader_registers_module_before_execution(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    previous = sys.modules["payment_dashboard.config"]
+    monkeypatch.delitem(sys.modules, "payment_dashboard.config")
+
+    loaded = app_module._load("config")
+
+    assert sys.modules["payment_dashboard.config"] is loaded
+    sys.modules["payment_dashboard.config"] = previous
+
+
 @fixture
 def dashboard_state(sample_transactions: pd.DataFrame) -> DashboardState:
     frame = dashboard_fixture(sample_transactions)

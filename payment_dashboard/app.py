@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
+import types
 from datetime import date
 from pathlib import Path
 
@@ -19,14 +21,24 @@ def _load(name: str):  # noqa: ANN001
         f"payment_dashboard.{name}", _PKG_DIR / f"{name}.py"
     )
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    sys.modules[spec.name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(spec.name, None)
+        raise
     return mod
 
 
-# Pre-load modules that app.py imports, so they register as
-# payment_dashboard.X in sys.modules before the main imports below.
-for _name in ("config", "models", "i18n", "data_loader", "analytics", "alerting"):
-    _load(_name)
+if __package__ in (None, ""):
+    package = types.ModuleType("payment_dashboard")
+    package.__path__ = [str(_PKG_DIR)]
+    package.__package__ = "payment_dashboard"
+    sys.modules.setdefault("payment_dashboard", package)
+
+    # Register direct dependencies before the normal package imports below.
+    for _name in ("config", "models", "i18n", "data_loader", "analytics", "alerting"):
+        _load(_name)
 
 # Now the normal imports work because the modules are in sys.modules.
 import pandas as pd  # noqa: E402
@@ -35,7 +47,10 @@ import streamlit as st  # noqa: E402
 from payment_dashboard.alerting import evaluate_alerts  # noqa: E402
 from payment_dashboard.analytics import add_latency_band, apply_filters  # noqa: E402
 from payment_dashboard.config import DEFAULT_DATA_PATH  # noqa: E402
-from payment_dashboard.data_loader import DataValidationError, load_transactions  # noqa: E402
+from payment_dashboard.data_loader import (  # noqa: E402
+    DataValidationError,
+    load_transactions,
+)
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate  # noqa: E402
 from payment_dashboard.models import DashboardState  # noqa: E402
 from payment_dashboard.ui.sections import (  # noqa: E402
