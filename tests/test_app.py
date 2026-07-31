@@ -206,6 +206,8 @@ def test_streamlit_secrets_populate_known_environment_settings(
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_MODEL",
         "PAYMENT_DEMO_MODE",
+        "SUPABASE_URL",
+        "SUPABASE_ANON_KEY",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(
@@ -216,6 +218,8 @@ def test_streamlit_secrets_populate_known_environment_settings(
             "ANTHROPIC_API_KEY": "secret",
             "ANTHROPIC_MODEL": "mimo-2.5-pro",
             "PAYMENT_DEMO_MODE": "1",
+            "SUPABASE_URL": "https://project.supabase.co",
+            "SUPABASE_ANON_KEY": "public-anon-key",
             "UNRELATED_SECRET": "ignored",
         },
     )
@@ -226,6 +230,8 @@ def test_streamlit_secrets_populate_known_environment_settings(
     assert os.environ["ANTHROPIC_API_KEY"] == "secret"
     assert os.environ["ANTHROPIC_MODEL"] == "mimo-2.5-pro"
     assert os.environ["PAYMENT_DEMO_MODE"] == "1"
+    assert os.environ["SUPABASE_URL"] == "https://project.supabase.co"
+    assert os.environ["SUPABASE_ANON_KEY"] == "public-anon-key"
     assert "UNRELATED_SECRET" not in os.environ
 
 
