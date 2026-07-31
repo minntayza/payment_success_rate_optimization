@@ -2,7 +2,7 @@ PYTHON = .venv/bin/python
 PYTEST = $(PYTHON) -m pytest
 RUFF = .venv/bin/ruff
 
-.PHONY: help setup test test-unit test-integration lint format run prepare verify-clean clean
+.PHONY: help setup test test-unit test-integration lint format run prepare load-supabase verify-clean clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -33,6 +33,10 @@ prepare:  ## Prepare data (requires raw CSV in data/raw/)
 	$(PYTHON) -m payment_dashboard.prepare_data \
 		--input data/raw/transaction_data.csv \
 		--output data/processed/transactions_with_gateways.csv
+
+load-supabase:  ## Import prepared simulated data into Supabase
+	$(PYTHON) -m payment_dashboard.load_supabase \
+		--input data/processed/transactions_with_gateways.csv
 
 verify-clean:  ## Verify install and launch from a clean Git export
 	./scripts/verify_clean_checkout.sh

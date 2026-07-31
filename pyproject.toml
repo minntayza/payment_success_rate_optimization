@@ -25,6 +25,7 @@ dev = [
 
 [project.scripts]
 payment-prepare = "payment_dashboard.prepare_data:main"
+payment-load-supabase = "payment_dashboard.load_supabase:main"
 
 [tool.setuptools.packages.find]
 include = ["payment_dashboard*"]
