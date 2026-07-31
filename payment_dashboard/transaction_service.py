@@ -91,9 +91,9 @@ def update_transaction(
     payload = validate_transaction(values)
     payload.pop("transaction_id", None)
     _execute(
-        client.table("transactions").update(payload).eq(
-            "transaction_id", transaction_id
-        ),
+        client.table("transactions")
+        .update(payload)
+        .eq("transaction_id", transaction_id),
         "Unable to update the transaction.",
     )
 
@@ -102,8 +102,8 @@ def soft_delete_transaction(client: Any, transaction_id: str) -> None:
     if not transaction_id.strip():
         raise TransactionValidationError("Transaction ID must not be blank")
     _execute(
-        client.table("transactions").update({"is_deleted": True}).eq(
-            "transaction_id", transaction_id
-        ),
+        client.table("transactions")
+        .update({"is_deleted": True})
+        .eq("transaction_id", transaction_id),
         "Unable to delete the transaction.",
     )
