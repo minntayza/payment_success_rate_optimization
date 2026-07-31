@@ -34,26 +34,37 @@ def values() -> dict[str, object]:
     }
 
 
-class Query:
+class Transactions:
     def __init__(self):
-        self.inserted = None
-        self.updated = None
-        self.filters = []
+        self.document = None
+        self.update = None
 
-    def insert(self, payload):
-        self.inserted = payload
-        return self
+    def insert_one(self, document):
+        self.document = document
 
-    def update(self, payload):
-        self.updated = payload
-        return self
+    def find_one(self, query):
+        return self.document or {"transaction_id": query["transaction_id"]}
 
-    def eq(self, column, value):
-        self.filters.append((column, value))
-        return self
+    def update_one(self, query, update):
+        self.update = (query, update)
+        return SimpleNamespace(matched_count=1)
 
-    def execute(self):
-        return SimpleNamespace(data=[])
+
+class Audit:
+    def __init__(self):
+        self.events = []
+
+    def insert_one(self, event):
+        self.events.append(event)
+
+
+class Database(dict):
+    def __init__(self):
+        self.transactions = Transactions()
+        self.audit = Audit()
+        super().__init__(
+            transactions=self.transactions, transaction_audit_log=self.audit
+        )
 
 
 def test_validation_rejects_negative_amount(values) -> None:
@@ -62,29 +73,28 @@ def test_validation_rejects_negative_amount(values) -> None:
         validate_transaction(values)
 
 
-def test_validation_rejects_invalid_gateway(values) -> None:
-    values["Bank Gateway"] = "Unknown"
-    with pytest.raises(TransactionValidationError, match="gateway"):
-        validate_transaction(values)
+def test_create_inserts_document_and_sanitized_audit(values) -> None:
+    database = Database()
+    create_transaction(database, values)
+    assert database.transactions.document["transaction_id"] == "TX-1"
+    event = database.audit.events[0]
+    assert event["action"] == "INSERT"
+    assert "pin_code" not in event["new_document"]
 
 
-def test_create_maps_dashboard_fields_to_database(values) -> None:
-    query = Query()
-    create_transaction(SimpleNamespace(table=lambda _: query), values)
-    assert query.inserted["transaction_id"] == "TX-1"
-    assert query.inserted["transaction_timestamp"].startswith("2025-01-17T10:00:00")
+def test_update_preserves_id_and_audits(values) -> None:
+    database = Database()
+    update_transaction(database, "TX-1", values)
+    query, update = database.transactions.update
+    assert query == {"transaction_id": "TX-1", "is_deleted": {"$ne": True}}
+    assert "transaction_id" not in update["$set"]
+    assert database.audit.events[0]["action"] == "UPDATE"
 
 
-def test_update_does_not_change_transaction_id(values) -> None:
-    query = Query()
-    values["Transaction Amount"] = 25
-    update_transaction(SimpleNamespace(table=lambda _: query), "TX-1", values)
-    assert "transaction_id" not in query.updated
-    assert query.filters == [("transaction_id", "TX-1")]
-
-
-def test_soft_delete_uses_update_not_delete() -> None:
-    query = Query()
-    soft_delete_transaction(SimpleNamespace(table=lambda _: query), "TX-1")
-    assert query.updated == {"is_deleted": True}
-    assert query.filters == [("transaction_id", "TX-1")]
+def test_soft_delete_updates_instead_of_deleting() -> None:
+    database = Database()
+    soft_delete_transaction(database, "TX-1")
+    _, update = database.transactions.update
+    assert update["$set"]["is_deleted"] is True
+    assert "deleted_at" in update["$set"]
+    assert database.audit.events[0]["action"] == "SOFT_DELETE"

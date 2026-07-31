@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
 
 from payment_dashboard.config import GATEWAYS, STATUSES
-from payment_dashboard.database import COLUMN_MAP
+from payment_dashboard.mongodb import COLUMN_MAP
 
 
 class TransactionValidationError(ValueError):
@@ -62,7 +63,11 @@ def validate_transaction(values: dict[str, object]) -> dict[str, object]:
         if name in reverse_map
     }
     payload["transaction_id"] = str(payload["transaction_id"]).strip()
-    payload["transaction_timestamp"] = timestamp.isoformat()
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize(UTC)
+    else:
+        timestamp = timestamp.tz_convert(UTC)
+    payload["transaction_timestamp"] = timestamp.to_pydatetime()
     payload["transaction_amount"] = float(payload["transaction_amount"])
     payload["latency_ms"] = float(payload["latency_ms"])
     payload["slice_bandwidth_mbps"] = float(payload["slice_bandwidth_mbps"])
@@ -70,40 +75,112 @@ def validate_transaction(values: dict[str, object]) -> dict[str, object]:
     return payload
 
 
-def _execute(operation: Any, message: str) -> None:
-    try:
-        operation.execute()
-    except Exception as exc:
-        raise TransactionMutationError(message) from exc
+def _sanitized(document: dict[str, object] | None) -> dict[str, object] | None:
+    if document is None:
+        return None
+    return {
+        key: value for key, value in document.items() if key not in {"_id", "pin_code"}
+    }
 
 
-def create_transaction(client: Any, values: dict[str, object]) -> None:
-    payload = validate_transaction(values)
-    _execute(
-        client.table("transactions").insert(payload),
-        "Unable to create the transaction. Check that its ID is unique.",
+def _audit(
+    database: Any,
+    transaction_id: str,
+    action: str,
+    old_document: dict[str, object] | None,
+    new_document: dict[str, object] | None,
+    actor: str,
+) -> None:
+    database["transaction_audit_log"].insert_one(
+        {
+            "transaction_id": transaction_id,
+            "action": action,
+            "actor": actor,
+            "changed_at": datetime.now(UTC),
+            "old_document": _sanitized(old_document),
+            "new_document": _sanitized(new_document),
+        }
     )
+
+
+def create_transaction(
+    database: Any, values: dict[str, object], actor: str = "administrator"
+) -> None:
+    payload = validate_transaction(values)
+    now = datetime.now(UTC)
+    payload.update(
+        {
+            "is_deleted": False,
+            "created_at": now,
+            "updated_at": now,
+            "created_by": actor,
+            "updated_by": actor,
+        }
+    )
+    try:
+        database["transactions"].insert_one(payload)
+        _audit(database, str(payload["transaction_id"]), "INSERT", None, payload, actor)
+    except Exception as exc:
+        raise TransactionMutationError(
+            "Unable to create the transaction. Check that its ID is unique."
+        ) from exc
 
 
 def update_transaction(
-    client: Any, transaction_id: str, values: dict[str, object]
+    database: Any,
+    transaction_id: str,
+    values: dict[str, object],
+    actor: str = "administrator",
 ) -> None:
     payload = validate_transaction(values)
     payload.pop("transaction_id", None)
-    _execute(
-        client.table("transactions")
-        .update(payload)
-        .eq("transaction_id", transaction_id),
-        "Unable to update the transaction.",
-    )
+    payload.update({"updated_at": datetime.now(UTC), "updated_by": actor})
+    try:
+        collection = database["transactions"]
+        query = {"transaction_id": transaction_id, "is_deleted": {"$ne": True}}
+        old_document = collection.find_one(query)
+        result = collection.update_one(query, {"$set": payload})
+        if not result.matched_count:
+            raise LookupError("Transaction not found")
+        new_document = {**(old_document or {}), **payload}
+        _audit(
+            database,
+            transaction_id,
+            "UPDATE",
+            old_document,
+            new_document,
+            actor,
+        )
+    except Exception as exc:
+        raise TransactionMutationError("Unable to update the transaction.") from exc
 
 
-def soft_delete_transaction(client: Any, transaction_id: str) -> None:
+def soft_delete_transaction(
+    database: Any, transaction_id: str, actor: str = "administrator"
+) -> None:
     if not transaction_id.strip():
         raise TransactionValidationError("Transaction ID must not be blank")
-    _execute(
-        client.table("transactions")
-        .update({"is_deleted": True})
-        .eq("transaction_id", transaction_id),
-        "Unable to delete the transaction.",
-    )
+    changes = {
+        "is_deleted": True,
+        "deleted_at": datetime.now(UTC),
+        "deleted_by": actor,
+        "updated_at": datetime.now(UTC),
+        "updated_by": actor,
+    }
+    try:
+        collection = database["transactions"]
+        query = {"transaction_id": transaction_id, "is_deleted": {"$ne": True}}
+        old_document = collection.find_one(query)
+        result = collection.update_one(query, {"$set": changes})
+        if not result.matched_count:
+            raise LookupError("Transaction not found")
+        _audit(
+            database,
+            transaction_id,
+            "SOFT_DELETE",
+            old_document,
+            {**(old_document or {}), **changes},
+            actor,
+        )
+    except Exception as exc:
+        raise TransactionMutationError("Unable to delete the transaction.") from exc
