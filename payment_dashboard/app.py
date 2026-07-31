@@ -18,8 +18,9 @@ CLOUD_SETTING_KEYS = (
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_MODEL",
     "PAYMENT_DEMO_MODE",
-    "SUPABASE_URL",
-    "SUPABASE_ANON_KEY",
+    "MONGODB_URI",
+    "MONGODB_DATABASE",
+    "ADMIN_PASSWORD_HASH",
 )
 
 
@@ -50,8 +51,8 @@ if __package__ in (None, ""):
         "models",
         "i18n",
         "data_loader",
-        "database",
-        "auth",
+        "mongodb",
+        "admin_auth",
         "transaction_service",
         "analytics",
         "alerting",
@@ -69,14 +70,14 @@ from payment_dashboard.data_loader import (  # noqa: E402
     DataValidationError,
     load_transactions,
 )
-from payment_dashboard.database import (  # noqa: E402
-    DatabaseResult,
-    create_client_from_env,
-    load_dashboard_transactions,
-)
 from payment_dashboard.demo_data import generate_demo_transactions  # noqa: E402
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate  # noqa: E402
 from payment_dashboard.models import DashboardState  # noqa: E402
+from payment_dashboard.mongodb import (  # noqa: E402
+    DatabaseResult,
+    create_resources_from_env,
+    load_dashboard_transactions,
+)
 from payment_dashboard.ui.admin import render_admin_panel  # noqa: E402
 from payment_dashboard.ui.sections import (  # noqa: E402
     render_ai_operations_brief,
@@ -135,7 +136,7 @@ def _render_language_toggle() -> Language:
 
 
 def _load_data(language: Language = DEFAULT_LANGUAGE) -> DatabaseResult:
-    """Load Supabase transactions with a validated local/demo fallback."""
+    """Load MongoDB transactions with a validated local/demo fallback."""
     data_path = Path(os.getenv("PAYMENT_DATA_PATH", str(DEFAULT_DATA_PATH)))
 
     def fallback() -> pd.DataFrame:
@@ -283,10 +284,17 @@ def render_app() -> None:
     full_frame = database_result.frame
     if database_result.message:
         st.info(database_result.message)
-    admin_client = (
-        create_client_from_env() if database_result.source == "supabase" else None
+    resources = (
+        create_resources_from_env() if database_result.source == "mongodb" else None
     )
-    if render_admin_panel(admin_client, database_result.source, full_frame, language):
+    admin_database = resources.database if resources is not None else None
+    if render_admin_panel(
+        admin_database,
+        database_result.source,
+        full_frame,
+        language,
+        os.getenv("ADMIN_PASSWORD_HASH"),
+    ):
         st.rerun()
     replay_count, gateways, transaction_types, devices, statuses, start, end = (
         _render_sidebar(full_frame, language=language)

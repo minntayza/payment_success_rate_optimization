@@ -26,3 +26,13 @@ def test_clear_admin_session_removes_auth_state(monkeypatch) -> None:
     monkeypatch.setattr(admin.st, "session_state", {admin.AUTH_STATE_KEY: object()})
     admin._clear_admin_session()
     assert admin.AUTH_STATE_KEY not in admin.st.session_state
+
+
+def test_authentication_requires_matching_hash_fingerprint(monkeypatch) -> None:
+    monkeypatch.setattr(
+        admin.st,
+        "session_state",
+        {admin.AUTH_STATE_KEY: {"authenticated": True, "fingerprint": "old"}},
+    )
+    assert admin._is_authenticated("new") is False
+    assert admin.AUTH_STATE_KEY not in admin.st.session_state

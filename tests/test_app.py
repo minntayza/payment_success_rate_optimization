@@ -207,8 +207,9 @@ def test_streamlit_secrets_populate_known_environment_settings(
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_MODEL",
         "PAYMENT_DEMO_MODE",
-        "SUPABASE_URL",
-        "SUPABASE_ANON_KEY",
+        "MONGODB_URI",
+        "MONGODB_DATABASE",
+        "ADMIN_PASSWORD_HASH",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(
@@ -219,8 +220,9 @@ def test_streamlit_secrets_populate_known_environment_settings(
             "ANTHROPIC_API_KEY": "secret",
             "ANTHROPIC_MODEL": "mimo-2.5-pro",
             "PAYMENT_DEMO_MODE": "1",
-            "SUPABASE_URL": "https://project.supabase.co",
-            "SUPABASE_ANON_KEY": "public-anon-key",
+            "MONGODB_URI": "mongodb+srv://example.invalid",
+            "MONGODB_DATABASE": "payment_demo",
+            "ADMIN_PASSWORD_HASH": "pbkdf2_sha256$600000$salt$key",
             "UNRELATED_SECRET": "ignored",
         },
     )
@@ -231,9 +233,12 @@ def test_streamlit_secrets_populate_known_environment_settings(
     assert os.environ["ANTHROPIC_API_KEY"] == "secret"
     assert os.environ["ANTHROPIC_MODEL"] == "mimo-2.5-pro"
     assert os.environ["PAYMENT_DEMO_MODE"] == "1"
-    assert os.environ["SUPABASE_URL"] == "https://project.supabase.co"
-    assert os.environ["SUPABASE_ANON_KEY"] == "public-anon-key"
+    assert os.environ["MONGODB_URI"] == "mongodb+srv://example.invalid"
+    assert os.environ["MONGODB_DATABASE"] == "payment_demo"
+    assert os.environ["ADMIN_PASSWORD_HASH"].startswith("pbkdf2_sha256$")
     assert "UNRELATED_SECRET" not in os.environ
+    for key in app_module.CLOUD_SETTING_KEYS:
+        monkeypatch.delenv(key, raising=False)
 
 
 @fixture

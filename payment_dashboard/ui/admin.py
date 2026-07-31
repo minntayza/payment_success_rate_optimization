@@ -8,14 +8,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from payment_dashboard.auth import (
-    AuthenticationError,
-    AuthState,
-    is_admin,
-    restore_session,
-    sign_in,
-    sign_out,
-)
+from payment_dashboard.admin_auth import hash_fingerprint, verify_password
 from payment_dashboard.config import GATEWAYS
 from payment_dashboard.i18n import Language, translate
 from payment_dashboard.transaction_service import (
@@ -28,11 +21,20 @@ from payment_dashboard.transaction_service import (
     update_transaction,
 )
 
-AUTH_STATE_KEY = "supabase_admin_auth"
+AUTH_STATE_KEY = "mongodb_admin_auth"
 
 
 def _clear_admin_session() -> None:
     st.session_state.pop(AUTH_STATE_KEY, None)
+
+
+def _is_authenticated(password_hash: str) -> bool:
+    state = st.session_state.get(AUTH_STATE_KEY)
+    fingerprint = hash_fingerprint(password_hash)
+    if not isinstance(state, dict) or state.get("fingerprint") != fingerprint:
+        _clear_admin_session()
+        return False
+    return state.get("authenticated") is True
 
 
 def _row_values(row: pd.Series) -> dict[str, object]:
@@ -162,30 +164,25 @@ def _transaction_form(prefix: str, values: dict[str, object]) -> dict[str, objec
     }
 
 
-def _render_login(client: Any, language: Language) -> None:
+def _render_login(password_hash: str, language: Language) -> None:
     with st.form("admin_login"):
-        email = st.text_input(translate("admin.email", language))
         password = st.text_input(translate("admin.password", language), type="password")
         submitted = st.form_submit_button(translate("admin.login", language))
     if submitted:
-        try:
-            state = sign_in(client, email, password)
-            if not is_admin(client, state.user_id):
-                sign_out(client)
-                st.error(translate("admin.not_authorized", language))
-                return
-            st.session_state[AUTH_STATE_KEY] = state
+        if verify_password(password, password_hash):
+            st.session_state[AUTH_STATE_KEY] = {
+                "authenticated": True,
+                "fingerprint": hash_fingerprint(password_hash),
+            }
             st.rerun()
-        except AuthenticationError as exc:
-            st.error(str(exc))
+        else:
+            st.error(translate("admin.login_failed", language))
 
 
-def _render_manager(client: Any, frame: pd.DataFrame, language: Language) -> bool:
+def _render_manager(database: Any, frame: pd.DataFrame, language: Language) -> bool:
     changed = False
-    state: AuthState = st.session_state[AUTH_STATE_KEY]
-    st.caption(translate("admin.signed_in", language, email=state.email))
+    st.caption(translate("admin.signed_in", language, email="Administrator"))
     if st.button(translate("admin.logout", language)):
-        sign_out(client)
         _clear_admin_session()
         st.rerun()
     add_tab, edit_tab, delete_tab = st.tabs(
@@ -198,7 +195,7 @@ def _render_manager(client: Any, frame: pd.DataFrame, language: Language) -> boo
     with add_tab, st.form("add_transaction"):
         values = _transaction_form("add", _defaults())
         if st.form_submit_button(translate("admin.save", language)):
-            create_transaction(client, values)
+            create_transaction(database, values)
             st.success(translate("admin.created", language))
             changed = True
     ids = frame["Transaction ID"].astype(str).tolist()
@@ -208,7 +205,7 @@ def _render_manager(client: Any, frame: pd.DataFrame, language: Language) -> boo
         with st.form("edit_transaction"):
             values = _transaction_form("edit", _row_values(row))
             if st.form_submit_button(translate("admin.update", language)):
-                update_transaction(client, selected, values)
+                update_transaction(database, selected, values)
                 st.success(translate("admin.updated", language))
                 changed = True
     with delete_tab, st.form("delete_transaction"):
@@ -220,38 +217,29 @@ def _render_manager(client: Any, frame: pd.DataFrame, language: Language) -> boo
             if not confirmed:
                 st.warning(translate("admin.confirm_required", language))
             else:
-                soft_delete_transaction(client, selected)
+                soft_delete_transaction(database, selected)
                 st.success(translate("admin.deleted", language))
                 changed = True
     return changed
 
 
 def render_admin_panel(
-    client: Any | None,
+    database: Any | None,
     database_source: str,
     frame: pd.DataFrame,
     language: Language,
+    password_hash: str | None = None,
 ) -> bool:
     """Render authenticated CRUD controls and return whether data changed."""
-    if database_source != "supabase" or client is None:
+    if database_source != "mongodb" or database is None or not password_hash:
         st.info(translate("admin.fallback_disabled", language))
         return False
     with st.expander(translate("admin.title", language)):
-        state = st.session_state.get(AUTH_STATE_KEY)
-        if state is None:
-            _render_login(client, language)
+        if not _is_authenticated(password_hash):
+            _render_login(password_hash, language)
             return False
         try:
-            restore_session(client, state)
-            if not is_admin(client, state.user_id):
-                _clear_admin_session()
-                st.error(translate("admin.not_authorized", language))
-                return False
-            return _render_manager(client, frame, language)
-        except (
-            AuthenticationError,
-            TransactionMutationError,
-            TransactionValidationError,
-        ) as exc:
+            return _render_manager(database, frame, language)
+        except (TransactionMutationError, TransactionValidationError) as exc:
             st.error(str(exc))
             return False
