@@ -12,6 +12,27 @@ html, body, [class*="css"] {
 .stApp {
     background: #ffffff;
 }
+[data-testid="stMain"] {
+    color: #0f172a;
+    background: #ffffff;
+    color-scheme: light;
+}
+[data-testid="stMain"] p,
+[data-testid="stMain"] li,
+[data-testid="stMain"] label,
+[data-testid="stMain"] [data-testid="stMarkdownContainer"],
+[data-testid="stMain"] [data-testid="stCaptionContainer"],
+[data-testid="stMain"] [data-testid="stWidgetLabel"] {
+    color: #334155 !important;
+}
+[data-testid="stMain"] h1,
+[data-testid="stMain"] h2,
+[data-testid="stMain"] h3,
+[data-testid="stMain"] h4,
+[data-testid="stMain"] h5,
+[data-testid="stMain"] h6 {
+    color: #0f172a !important;
+}
 .block-container {
     max-width: 1440px;
     padding-top: 2rem;
