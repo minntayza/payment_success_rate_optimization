@@ -195,7 +195,8 @@ def test_load_data_uses_demo_generator_when_enabled(
 
     loaded = app_module._load_data()
 
-    pd.testing.assert_frame_equal(loaded, expected)
+    assert loaded.source == "fallback"
+    pd.testing.assert_frame_equal(loaded.frame, expected)
 
 
 def test_streamlit_secrets_populate_known_environment_settings(

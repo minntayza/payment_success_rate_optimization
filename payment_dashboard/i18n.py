@@ -109,6 +109,29 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "Generate the prepared dataset with "
             "`python -m payment_dashboard.prepare_data` and refresh this page."
         ),
+        "admin.title": "Administrator transaction manager",
+        "admin.fallback_disabled": (
+            "Database editing is unavailable while demo fallback data is active."
+        ),
+        "admin.email": "Administrator email",
+        "admin.password": "Password",
+        "admin.login": "Sign in",
+        "admin.logout": "Sign out",
+        "admin.not_authorized": "This account is not an approved administrator.",
+        "admin.signed_in": "Signed in as {email}",
+        "admin.add": "Add",
+        "admin.edit": "Edit",
+        "admin.delete": "Soft delete",
+        "admin.choose": "Choose a transaction",
+        "admin.save": "Save transaction",
+        "admin.update": "Update transaction",
+        "admin.confirm_delete": (
+            "I confirm this transaction should be hidden from analytics."
+        ),
+        "admin.confirm_required": "Confirm the soft deletion first.",
+        "admin.created": "Transaction created.",
+        "admin.updated": "Transaction updated.",
+        "admin.deleted": "Transaction soft-deleted.",
         "test.fallback": "Fallback",
     },
     "my": {
@@ -207,6 +230,27 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "`python -m payment_dashboard.prepare_data` ဖြင့် ပြင်ဆင်ထားသော dataset ကို "
             "ဖန်တီးပြီး ဤစာမျက်နှာကို ပြန်လည်ဖွင့်ပါ။"
         ),
+        "admin.title": "စီမံခန့်ခွဲသူ ငွေပေးချေမှု စီမံခန့်ခွဲမှု",
+        "admin.fallback_disabled": (
+            "Demo fallback data အသုံးပြုနေချိန် database ပြင်ဆင်မှု မရနိုင်ပါ။"
+        ),
+        "admin.email": "စီမံခန့်ခွဲသူ အီးမေးလ်",
+        "admin.password": "စကားဝှက်",
+        "admin.login": "ဝင်ရောက်ရန်",
+        "admin.logout": "ထွက်ရန်",
+        "admin.not_authorized": "ဤအကောင့်သည် ခွင့်ပြုထားသော စီမံခန့်ခွဲသူ မဟုတ်ပါ။",
+        "admin.signed_in": "{email} ဖြင့် ဝင်ရောက်ထားသည်",
+        "admin.add": "အသစ်ထည့်ရန်",
+        "admin.edit": "ပြင်ဆင်ရန်",
+        "admin.delete": "ဖျက်ထားကြောင်း မှတ်ရန်",
+        "admin.choose": "ငွေပေးချေမှု ရွေးရန်",
+        "admin.save": "ငွေပေးချေမှု သိမ်းရန်",
+        "admin.update": "ငွေပေးချေမှု ပြင်ဆင်ရန်",
+        "admin.confirm_delete": "ဤငွေပေးချေမှုကို ခွဲခြမ်းမှုမှ ဖျောက်ရန် အတည်ပြုသည်။",
+        "admin.confirm_required": "Soft deletion ကို ဦးစွာ အတည်ပြုပါ။",
+        "admin.created": "ငွေပေးချေမှု အသစ်ထည့်ပြီးပါပြီ။",
+        "admin.updated": "ငွေပေးချေမှု ပြင်ဆင်ပြီးပါပြီ။",
+        "admin.deleted": "ငွေပေးချေမှုကို soft-delete ပြုလုပ်ပြီးပါပြီ။",
         "test.fallback": "",
     },
 }

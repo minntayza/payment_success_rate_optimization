@@ -45,7 +45,17 @@ if __package__ in (None, ""):
     sys.modules.setdefault("payment_dashboard", package)
 
     # Register direct dependencies before the normal package imports below.
-    for _name in ("config", "models", "i18n", "data_loader", "analytics", "alerting"):
+    for _name in (
+        "config",
+        "models",
+        "i18n",
+        "data_loader",
+        "database",
+        "auth",
+        "transaction_service",
+        "analytics",
+        "alerting",
+    ):
         _load(_name)
 
 # Now the normal imports work because the modules are in sys.modules.
@@ -59,9 +69,15 @@ from payment_dashboard.data_loader import (  # noqa: E402
     DataValidationError,
     load_transactions,
 )
+from payment_dashboard.database import (  # noqa: E402
+    DatabaseResult,
+    create_client_from_env,
+    load_dashboard_transactions,
+)
 from payment_dashboard.demo_data import generate_demo_transactions  # noqa: E402
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate  # noqa: E402
 from payment_dashboard.models import DashboardState  # noqa: E402
+from payment_dashboard.ui.admin import render_admin_panel  # noqa: E402
 from payment_dashboard.ui.sections import (  # noqa: E402
     render_ai_operations_brief,
     render_failure_analysis,
@@ -118,17 +134,21 @@ def _render_language_toggle() -> Language:
     return language
 
 
-def _load_data(language: Language = DEFAULT_LANGUAGE) -> pd.DataFrame:
-    """Load transaction data or show Streamlit error and stop."""
+def _load_data(language: Language = DEFAULT_LANGUAGE) -> DatabaseResult:
+    """Load Supabase transactions with a validated local/demo fallback."""
     data_path = Path(os.getenv("PAYMENT_DATA_PATH", str(DEFAULT_DATA_PATH)))
-    if os.getenv("PAYMENT_DEMO_MODE") == "1" and not data_path.is_file():
-        return generate_demo_transactions()
-    try:
-        return load_transactions(data_path, require_gateway=True)
-    except DataValidationError as exc:
-        st.error(translate("errors.load_data", language, exc=exc))
-        st.info(translate("errors.prepare_data_guidance", language))
-        st.stop()
+
+    def fallback() -> pd.DataFrame:
+        if os.getenv("PAYMENT_DEMO_MODE") == "1" and not data_path.is_file():
+            return generate_demo_transactions()
+        try:
+            return load_transactions(data_path, require_gateway=True)
+        except DataValidationError as exc:
+            st.error(translate("errors.load_data", language, exc=exc))
+            st.info(translate("errors.prepare_data_guidance", language))
+            st.stop()
+
+    return load_dashboard_transactions(fallback)
 
 
 def _apply_streamlit_secrets() -> None:
@@ -259,7 +279,15 @@ def render_app() -> None:
     st.markdown(translate("dashboard.description", language))
     st.caption(translate("dashboard.disclaimer", language))
 
-    full_frame = _load_data(language)
+    database_result = _load_data(language)
+    full_frame = database_result.frame
+    if database_result.message:
+        st.info(database_result.message)
+    admin_client = (
+        create_client_from_env() if database_result.source == "supabase" else None
+    )
+    if render_admin_panel(admin_client, database_result.source, full_frame, language):
+        st.rerun()
     replay_count, gateways, transaction_types, devices, statuses, start, end = (
         _render_sidebar(full_frame, language=language)
     )

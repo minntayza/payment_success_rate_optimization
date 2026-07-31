@@ -84,3 +84,12 @@ def test_recent_transaction_table_headers_are_translated(
 ) -> None:
     assert translate(key) == english
     assert translate(key, "my") == burmese
+
+
+def test_admin_labels_exist_in_both_languages() -> None:
+    for language in ("en", "my"):
+        assert translate("admin.title", language) != "admin.title"
+        assert translate("admin.login", language) != "admin.login"
+        assert translate("admin.fallback_disabled", language) != (
+            "admin.fallback_disabled"
+        )
