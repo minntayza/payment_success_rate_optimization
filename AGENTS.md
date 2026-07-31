@@ -5,8 +5,8 @@
 `payment_dashboard/` contains the application code. `app.py` is the Streamlit
 entry point, `prepare_data.py` enriches raw transactions with simulated gateway
 data, and `analytics.py` and `alerting.py` implement dashboard logic. Shared
-configuration and data models live in `config.py` and `models.py`; Supabase
-access is isolated in `database.py`, `auth.py`, and `transaction_service.py`; reusable
+configuration and data models live in `config.py` and `models.py`; MongoDB
+access is isolated in `mongodb.py`, `admin_auth.py`, and `transaction_service.py`; reusable
 presentation components belong in `payment_dashboard/ui/`.
 
 Tests live in `tests/` and mirror the application modules. Documentation is in
@@ -18,7 +18,7 @@ Tests live in `tests/` and mirror the application modules. Documentation is in
 - `make setup` creates `.venv` and installs the package with development tools.
 - `make run` starts the local Streamlit app.
 - `make prepare` generates the gateway-enriched dataset from the expected raw CSV.
-- `make load-supabase` imports the prepared data using local-only Supabase admin credentials.
+- `make load-mongodb` imports the prepared data using MongoDB Atlas credentials.
 - `make test` runs the complete pytest suite.
 - `make test-unit` or `make test-integration` runs a focused test category.
 - `make lint` checks Ruff rules; `make format` applies Ruff formatting.

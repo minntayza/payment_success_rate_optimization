@@ -20,16 +20,16 @@ be interpreted as measurements of real banks or payment gateways.
 - Top-of-page English/မြန်မာ language switch
 - Button-triggered English AI Operations Brief generated with MiMo 2.5 Pro
 - Interactive Plotly charts and recent-transaction investigation
-- Supabase PostgreSQL storage with public read-only analytics
-- Supabase Auth administrator login with create, edit, and soft-delete controls
-- PostgreSQL RLS and immutable transaction audit records
+- MongoDB Atlas document storage with public read-only analytics
+- Hashed-password administrator login with create, edit, and soft-delete controls
+- Indexed MongoDB queries and transaction audit records
 
 ## Requirements
 
 - Python 3.11 or newer
 - Access to an Anthropic-compatible MiMo 2.5 Pro endpoint
 - The source file `transaction_data.csv`
-- A Supabase project for client-server database mode
+- A MongoDB Atlas project for client-server database mode
 
 ## Setup
 
@@ -67,11 +67,11 @@ Do not commit your real API key. Only aggregate metrics are sent to the model.
 Raw transaction rows,
 transaction IDs, timestamps, and individual amounts are excluded.
 
-### Configure Supabase PostgreSQL
+### Configure MongoDB Atlas
 
-Follow [docs/supabase-setup.md](docs/supabase-setup.md) to create the tables,
-enable Row-Level Security, approve an administrator, import the simulated dataset,
-and configure Streamlit secrets. Without Supabase configuration, the app remains
+Follow [docs/mongodb-atlas-setup.md](docs/mongodb-atlas-setup.md) to create the
+cluster and database user, generate an administrator password hash, import the
+simulated dataset, and configure Streamlit secrets. Without Atlas, the app remains
 usable in read-only CSV/demo fallback mode.
 
 ## Prepare the dataset
@@ -122,8 +122,8 @@ automatically. Stop the server with `Ctrl+C`.
 7. Use Failure Analysis to investigate patterns by fraud flag, latency band,
    device, and transaction type.
 8. Use Recent Transactions to inspect individual records.
-9. Approved administrators can expand **Administrator transaction manager**, sign
-   in with Supabase Auth, and create, edit, or soft-delete simulated records.
+9. The administrator can expand **Administrator transaction manager**, enter the
+   configured password, and create, edit, or soft-delete simulated records.
 
 The AI brief is English-only, uses simulated gateway data, and is not real
 financial or routing advice. If configuration is missing or the provider is
@@ -153,15 +153,12 @@ payment_dashboard/
 ├── alerting.py       # Baselines and rolling alert evaluation
 ├── analytics.py      # Metrics, filtering, breakdowns, and time series
 ├── app.py            # Streamlit web interface
-├── auth.py           # Supabase Auth session helpers
-├── database.py       # Supabase reads and DataFrame mapping
+├── admin_auth.py     # Hashed administrator password verification
+├── mongodb.py        # Atlas reads, indexes, and DataFrame mapping
 ├── data_loader.py    # Schema validation and typed loading
-├── load_supabase.py  # Local validated database importer
+├── load_mongodb.py   # Local validated Atlas importer
 ├── prepare_data.py   # Reproducible gateway enrichment command
 └── transaction_service.py # Validated admin mutations
-
-sql/
-└── schema.sql        # Tables, RLS policies, indexes, and audit triggers
 
 tests/
 ├── conftest.py
@@ -201,7 +198,7 @@ Choose another port:
 - The replay slider simulates arrival from a historical CSV; it is not a
   production streaming pipeline.
 - The application does not connect to banks, payment APIs, or external
-  alert-delivery services. Its Supabase records remain simulated academic data.
+  alert-delivery services. Its MongoDB records remain simulated academic data.
 - The dataset has no explicit insufficient-balance, incorrect PIN, or incorrect
   OTP failure-reason fields.
 - The application is designed for local academic demonstration, not production
