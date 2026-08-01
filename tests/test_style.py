@@ -26,6 +26,15 @@ def test_playful_theme_has_narrow_layout_rules() -> None:
     assert 'min-width: 100%;' in PAGE_CSS
 
 
+def test_empty_state_bounds_and_integrates_mascot() -> None:
+    assert ".empty-state {" in PAGE_CSS
+    assert "text-align: center;" in PAGE_CSS
+    assert ".empty-mascot {" in PAGE_CSS
+    assert "width: 6rem;" in PAGE_CSS
+    assert "height: 6rem;" in PAGE_CSS
+    assert "max-width: 100%;" in PAGE_CSS
+
+
 def test_sidebar_language_control_keeps_its_text_high_contrast() -> None:
     sidebar_widget_label_rule = (
         '[data-testid="stSidebar"] '

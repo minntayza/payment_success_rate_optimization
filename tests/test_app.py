@@ -432,6 +432,7 @@ def test_empty_state_renders_localized_semantic_wrapper(
     body, allows_html = rendered[0]
     assert '<section class="empty-state">' in body
     assert '<img class="empty-mascot"' in body
+    assert 'width="96" height="96"' in body
     assert 'alt=""' in body
     assert 'aria-hidden="true"' in body
     assert "ကိုက်ညီသော ငွေပေးချေမှု မရှိပါ" in body

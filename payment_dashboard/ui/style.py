@@ -152,6 +152,37 @@ html, body, [class*="css"] {
     overflow-wrap: anywhere;
 }
 
+.empty-state {
+    max-width: 44rem;
+    margin: 1.5rem auto 2rem;
+    padding: 2rem;
+    border: 1px solid #e7defa;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, #ffffff, #f9f6ff);
+    box-shadow: var(--shadow-soft);
+    text-align: center;
+}
+
+.empty-state h2 { margin: 0.5rem 0; }
+.empty-state p { margin: 0.35rem auto 1rem; }
+
+.empty-mascot {
+    display: block;
+    width: 6rem;
+    height: 6rem;
+    max-width: 100%;
+    margin: 0 auto 0.75rem;
+}
+
+.empty-action {
+    display: inline-block;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    background: var(--mint);
+    color: var(--ink);
+    font-weight: 750;
+}
+
 [data-testid="stMetric"] {
     height: 100%;
     background: rgba(255, 255, 255, 0.92);

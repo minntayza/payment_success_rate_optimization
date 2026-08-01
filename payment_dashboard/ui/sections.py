@@ -104,7 +104,7 @@ def render_empty_state(language: Language = DEFAULT_LANGUAGE) -> None:
             (
                 '<section class="empty-state">',
                 f'  <img class="empty-mascot" src="{EMPTY_MASCOT_DATA_URI}" '
-                'alt="" aria-hidden="true">',
+                'width="96" height="96" alt="" aria-hidden="true">',
                 f"  <h2>{translate('empty.title', language)}</h2>",
                 f"  <p>{translate('empty.body', language)}</p>",
                 '  <span class="empty-action">↻ '
