@@ -22,7 +22,7 @@ from payment_dashboard.prepare_data import assign_gateways
 
 
 @pytest.mark.integration
-def test_language_toggle_preserves_filters_and_translates_app(
+def test_language_toggle_preserves_filters_and_translates_reset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     prepared_path = tmp_path / "prepared_transactions.csv"
@@ -42,6 +42,7 @@ def test_language_toggle_preserves_filters_and_translates_app(
     assert app.title[0].value == "Payment Success Monitor"
     assert app.toggle[0].label == "Language / ဘာသာစကား"
     assert "Current: English" in [caption.value for caption in app.caption]
+    assert app.sidebar.button[0].label == "Reset filters"
     assert not app.exception
 
     app.sidebar.slider[0].set_value(120)
@@ -59,6 +60,7 @@ def test_language_toggle_preserves_filters_and_translates_app(
     assert app.title[0].value == "ငွေပေးချေမှု အောင်မြင်နှုန်း စောင့်ကြည့်စနစ်"
     assert app.toggle[0].label == "Language / ဘာသာစကား"
     assert "လက်ရှိ: မြန်မာ" in [caption.value for caption in app.caption]
+    assert app.sidebar.button[0].label == "စစ်ထုတ်မှုများ ပြန်လည်သတ်မှတ်ရန်"
     assert not app.exception
     assert app.sidebar.multiselect[0].options == english_gateway_options
     assert app.sidebar.slider[0].value == 120

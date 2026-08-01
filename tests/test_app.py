@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from contextlib import nullcontext
+from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -251,6 +252,229 @@ def dashboard_state(sample_transactions: pd.DataFrame) -> DashboardState:
     frame = dashboard_fixture(sample_transactions)
     alerts = evaluate_alerts(frame, frame)
     return DashboardState(frame, frame, alerts)
+
+
+def _patch_render_app_shell(
+    monkeypatch: MonkeyPatch,
+    state: DashboardState,
+) -> tuple[list[dict[str, object]], MagicMock]:
+    """Replace Streamlit and data-loading edges around the real composition."""
+    containers: list[dict[str, object]] = []
+    rerun = MagicMock()
+
+    monkeypatch.setattr(app_module.st, "session_state", {})
+    monkeypatch.setattr(app_module.st, "set_page_config", lambda **_: None)
+    monkeypatch.setattr(app_module.st, "title", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "markdown", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "info", lambda *_: None)
+    monkeypatch.setattr(
+        app_module.st,
+        "container",
+        lambda *_, **kwargs: containers.append(kwargs) or nullcontext(),
+    )
+    monkeypatch.setattr(
+        app_module.st,
+        "columns",
+        lambda count: [nullcontext() for _ in range(count)],
+    )
+    monkeypatch.setattr(app_module.st, "rerun", rerun)
+    monkeypatch.setattr(app_module, "_apply_streamlit_secrets", lambda: None)
+    monkeypatch.setattr(app_module, "apply_page_style", lambda: None)
+    monkeypatch.setattr(app_module, "_render_language_toggle", lambda: "my")
+    monkeypatch.setattr(
+        app_module,
+        "_load_data",
+        lambda language: app_module.DatabaseResult(state.replay_frame, "fallback"),
+    )
+    monkeypatch.setattr(
+        app_module,
+        "_render_sidebar",
+        lambda *_args, **_kwargs: (
+            len(state.replay_frame),
+            [],
+            [],
+            [],
+            [],
+            None,
+            None,
+        ),
+    )
+    monkeypatch.setattr(app_module, "build_dashboard_state", lambda *_args: state)
+    return containers, rerun
+
+
+@pytest.mark.integration
+def test_story_first_composition_and_admin_rerun(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    expected = [
+        "hero",
+        "kpis",
+        "ai",
+        "gateway_health",
+        "gateway_performance",
+        "success_trend",
+        "failure_analysis",
+        "recent",
+        "guide",
+    ]
+    calls: list[str] = []
+    admin_snapshots: list[list[str]] = []
+    containers, rerun = _patch_render_app_shell(monkeypatch, dashboard_state)
+
+    def render_hero(
+        state: DashboardState,
+        database_source: str,
+        language: str,
+    ) -> None:
+        assert state is dashboard_state
+        assert database_source == "fallback"
+        assert language == "my"
+        calls.append("hero")
+
+    def render_ai(state: DashboardState, language: str) -> None:
+        assert state is dashboard_state
+        assert language == "my"
+        calls.append("ai")
+
+    def render_admin(*_args: object, **_kwargs: object) -> bool:
+        admin_snapshots.append(calls.copy())
+        return True
+
+    monkeypatch.setattr(app_module, "render_story_hero", render_hero, raising=False)
+    monkeypatch.setattr(
+        app_module,
+        "render_kpis",
+        lambda *_args, **_kwargs: calls.append("kpis"),
+    )
+    monkeypatch.setattr(app_module, "render_ai_operations_brief", render_ai)
+    for name, call_name in (
+        ("render_gateway_health", "gateway_health"),
+        ("render_gateway_performance", "gateway_performance"),
+        ("render_success_trend", "success_trend"),
+        ("render_failure_analysis", "failure_analysis"),
+        ("render_recent_transactions", "recent"),
+        ("render_interpretation_guide", "guide"),
+    ):
+        monkeypatch.setattr(
+            app_module,
+            name,
+            lambda *_args, _call_name=call_name, **_kwargs: calls.append(_call_name),
+        )
+    monkeypatch.setattr(app_module, "render_admin_panel", render_admin)
+
+    app_module.render_app()
+
+    assert calls == expected
+    assert admin_snapshots == [expected]
+    assert containers == [{"border": True}]
+    rerun.assert_called_once_with()
+
+
+@pytest.mark.integration
+def test_empty_state_stops_chart_and_table_composition(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    empty_state = DashboardState(
+        dashboard_state.replay_frame,
+        dashboard_state.display_frame.iloc[0:0],
+        dashboard_state.alerts,
+    )
+    calls: list[str] = []
+    admin = MagicMock(return_value=False)
+    _patch_render_app_shell(monkeypatch, empty_state)
+
+    for name, call_name in (
+        ("render_story_hero", "hero"),
+        ("render_kpis", "kpis"),
+        ("render_ai_operations_brief", "ai"),
+        ("render_gateway_health", "gateway_health"),
+        ("render_empty_state", "empty_state"),
+        ("render_gateway_performance", "gateway_performance"),
+        ("render_success_trend", "success_trend"),
+        ("render_failure_analysis", "failure_analysis"),
+        ("render_recent_transactions", "recent"),
+        ("render_interpretation_guide", "guide"),
+    ):
+        monkeypatch.setattr(
+            app_module,
+            name,
+            lambda *_args, _call_name=call_name, **_kwargs: calls.append(_call_name),
+            raising=False,
+        )
+    monkeypatch.setattr(app_module, "render_admin_panel", admin)
+
+    app_module.render_app()
+
+    assert calls == ["hero", "kpis", "ai", "gateway_health", "empty_state"]
+    admin.assert_not_called()
+
+
+@pytest.mark.integration
+def test_empty_state_renders_localized_semantic_wrapper(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    rendered: list[tuple[str, bool]] = []
+    renderer = getattr(sections_module, "render_empty_state", None)
+
+    assert renderer is not None
+    monkeypatch.setattr(
+        sections_module.st,
+        "markdown",
+        lambda body, **kwargs: rendered.append((body, kwargs["unsafe_allow_html"])),
+    )
+
+    renderer(language="my")
+
+    body, allows_html = rendered[0]
+    assert '<section class="empty-state">' in body
+    assert '<img class="empty-mascot"' in body
+    assert 'alt=""' in body
+    assert 'aria-hidden="true"' in body
+    assert "ကိုက်ညီသော ငွေပေးချေမှု မရှိပါ" in body
+    assert "စစ်ထုတ်မှုများ ပြန်လည်သတ်မှတ်ရန်" in body
+    assert allows_html is True
+
+
+@pytest.mark.integration
+def test_reset_clears_only_display_filter_widget_state(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    reset = getattr(app_module, "_reset_display_filters", None)
+    session = {
+        "gateway_filter": ["Gateway A"],
+        "transaction_type_filter": ["Transfer"],
+        "device_filter": ["Mobile"],
+        "status_filter": ["Success"],
+        "date_filter": (date(2025, 6, 1), date(2025, 6, 2)),
+        "replay_count": 120,
+        "language_toggle": True,
+        "ai_brief_text": "keep",
+        "admin_auth": {"authenticated": True},
+    }
+
+    assert reset is not None
+    monkeypatch.setattr(app_module.st, "session_state", session)
+
+    reset()
+
+    for key in (
+        "gateway_filter",
+        "transaction_type_filter",
+        "device_filter",
+        "status_filter",
+        "date_filter",
+    ):
+        assert key not in session
+    assert session == {
+        "replay_count": 120,
+        "language_toggle": True,
+        "ai_brief_text": "keep",
+        "admin_auth": {"authenticated": True},
+    }
 
 
 @pytest.mark.integration

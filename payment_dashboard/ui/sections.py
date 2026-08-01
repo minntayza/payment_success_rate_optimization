@@ -47,6 +47,17 @@ RECENT_COLUMN_KEYS = {
 
 AI_BRIEF_TEXT_KEY = "ai_brief_text"
 AI_BRIEF_FINGERPRINT_KEY = "ai_brief_fingerprint"
+EMPTY_MASCOT_DATA_URI = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' "
+    "viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='34' r='24' fill='%23F59E72'/%3E"
+    "%3Ccircle cx='16' cy='16' r='9' fill='%237C3AED'/%3E%3Ccircle cx='48' "
+    "cy='16' r='9' fill='%237C3AED'/%3E%3Ccircle cx='24' cy='31' r='5' "
+    "fill='%23FFF8F0'/%3E%3Ccircle cx='40' cy='31' r='5' fill='%23FFF8F0'/%3E"
+    "%3Ccircle cx='24' cy='31' r='2' fill='%23251A3D'/%3E%3Ccircle cx='40' "
+    "cy='31' r='2' fill='%23251A3D'/%3E%3Cpath d='M27 43q5 5 10 0' "
+    "fill='none' stroke='%23251A3D' stroke-width='3' stroke-linecap='round'/%3E"
+    "%3C/svg%3E"
+)
 
 
 def build_story_hero_html(
@@ -82,6 +93,25 @@ def render_story_hero(
     )
     st.markdown(
         build_story_hero_html(successful, metrics, status_key, language),
+        unsafe_allow_html=True,
+    )
+
+
+def render_empty_state(language: Language = DEFAULT_LANGUAGE) -> None:
+    """Render a localized, friendly empty-filter result."""
+    st.markdown(
+        "\n".join(
+            (
+                '<section class="empty-state">',
+                f'  <img class="empty-mascot" src="{EMPTY_MASCOT_DATA_URI}" '
+                'alt="" aria-hidden="true">',
+                f"  <h2>{translate('empty.title', language)}</h2>",
+                f"  <p>{translate('empty.body', language)}</p>",
+                '  <span class="empty-action">↻ '
+                f"{translate('actions.reset_filters', language)}</span>",
+                "</section>",
+            )
+        ),
         unsafe_allow_html=True,
     )
 

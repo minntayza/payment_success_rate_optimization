@@ -22,6 +22,13 @@ CLOUD_SETTING_KEYS = (
     "MONGODB_DATABASE",
     "ADMIN_PASSWORD_HASH",
 )
+FILTER_WIDGET_KEYS = (
+    "gateway_filter",
+    "transaction_type_filter",
+    "device_filter",
+    "status_filter",
+    "date_filter",
+)
 
 
 def _load(name: str):  # noqa: ANN001
@@ -81,12 +88,14 @@ from payment_dashboard.mongodb import (  # noqa: E402
 from payment_dashboard.ui.admin import render_admin_panel  # noqa: E402
 from payment_dashboard.ui.sections import (  # noqa: E402
     render_ai_operations_brief,
+    render_empty_state,
     render_failure_analysis,
     render_gateway_health,
     render_gateway_performance,
     render_interpretation_guide,
     render_kpis,
     render_recent_transactions,
+    render_story_hero,
     render_success_trend,
 )
 from payment_dashboard.ui.style import apply_page_style  # noqa: E402
@@ -175,6 +184,12 @@ def _sidebar_value(widget_key: str, default: object) -> object:
     return st.session_state.get(f"{widget_key}_value", default)
 
 
+def _reset_display_filters() -> None:
+    """Clear display filters without changing replay or application state."""
+    for key in FILTER_WIDGET_KEYS:
+        st.session_state.pop(key, None)
+
+
 def _render_sidebar(
     full_frame: pd.DataFrame,
     language: Language = DEFAULT_LANGUAGE,
@@ -206,55 +221,50 @@ def _render_sidebar(
     gateways = st.sidebar.multiselect(
         translate("sidebar.gateway", language),
         sorted(full_frame["Bank Gateway"].unique()),
-        default=_sidebar_value("gateway_filter", []),
+        default=[],
         placeholder=translate("sidebar.all_gateways", language),
         key="gateway_filter",
-        on_change=_persist_sidebar_value,
-        args=("gateway_filter",),
     )
     transaction_types = st.sidebar.multiselect(
         translate("sidebar.transaction_type", language),
         sorted(full_frame["Transaction Type"].unique()),
-        default=_sidebar_value("transaction_type_filter", []),
+        default=[],
         placeholder=translate("sidebar.all_transaction_types", language),
         key="transaction_type_filter",
-        on_change=_persist_sidebar_value,
-        args=("transaction_type_filter",),
     )
     devices = st.sidebar.multiselect(
         translate("sidebar.device", language),
         sorted(full_frame["Device Used"].unique()),
-        default=_sidebar_value("device_filter", []),
+        default=[],
         placeholder=translate("sidebar.all_devices", language),
         key="device_filter",
-        on_change=_persist_sidebar_value,
-        args=("device_filter",),
     )
     statuses = st.sidebar.multiselect(
         translate("sidebar.status", language),
         sorted(full_frame["Transaction Status"].unique()),
-        default=_sidebar_value("status_filter", []),
+        default=[],
         placeholder=translate("sidebar.all_statuses", language),
         key="status_filter",
-        on_change=_persist_sidebar_value,
-        args=("status_filter",),
     )
 
     minimum_date = full_frame["Timestamp"].min().date()
     maximum_date = full_frame["Timestamp"].max().date()
     selected_dates = st.sidebar.date_input(
         translate("sidebar.date_range", language),
-        value=_sidebar_value("date_range_filter", (minimum_date, maximum_date)),
+        value=(minimum_date, maximum_date),
         min_value=minimum_date,
         max_value=maximum_date,
-        key="date_range_filter",
-        on_change=_persist_sidebar_value,
-        args=("date_range_filter",),
+        key="date_filter",
     )
     start, end = (
         selected_dates
         if isinstance(selected_dates, tuple) and len(selected_dates) == 2
         else (minimum_date, maximum_date)
+    )
+    st.sidebar.button(
+        translate("actions.reset_filters", language),
+        type="secondary",
+        on_click=_reset_display_filters,
     )
     st.sidebar.info(translate("sidebar.filter_note", language))
 
@@ -288,14 +298,6 @@ def render_app() -> None:
         create_resources_from_env() if database_result.source == "mongodb" else None
     )
     admin_database = resources.database if resources is not None else None
-    if render_admin_panel(
-        admin_database,
-        database_result.source,
-        full_frame,
-        language,
-        os.getenv("ADMIN_PASSWORD_HASH"),
-    ):
-        st.rerun()
     replay_count, gateways, transaction_types, devices, statuses, start, end = (
         _render_sidebar(full_frame, language=language)
     )
@@ -311,19 +313,33 @@ def render_app() -> None:
         end,
     )
 
-    render_kpis(state, language=language)
-    render_ai_operations_brief(state)
-    render_gateway_health(state.alerts, language=language)
+    render_story_hero(state, database_result.source, language)
+    render_kpis(state, language)
+    render_ai_operations_brief(state, language)
+    render_gateway_health(state.alerts, language)
 
     if state.display_frame.empty:
-        st.info(translate("errors.no_matching_transactions", language))
+        render_empty_state(language)
         return
 
-    render_gateway_performance(state.display_frame, language=language)
-    render_success_trend(state.display_frame, language=language)
-    render_failure_analysis(state.display_frame, language=language)
-    render_recent_transactions(state.display_frame, language=language)
-    render_interpretation_guide(language=language)
+    render_gateway_performance(state.display_frame, language)
+    trend_column, failure_column = st.columns(2)
+    with trend_column:
+        render_success_trend(state.display_frame, language)
+    with failure_column:
+        render_failure_analysis(state.display_frame, language)
+    render_recent_transactions(state.display_frame, language)
+    render_interpretation_guide(language)
+
+    with st.container(border=True):
+        if render_admin_panel(
+            admin_database,
+            database_result.source,
+            full_frame,
+            language,
+            os.getenv("ADMIN_PASSWORD_HASH"),
+        ):
+            st.rerun()
 
 
 if __name__ == "__main__":
