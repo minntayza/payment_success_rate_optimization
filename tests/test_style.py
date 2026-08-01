@@ -3,6 +3,25 @@
 from payment_dashboard.ui.style import PAGE_CSS
 
 
+def test_playful_theme_exposes_design_tokens_and_component_hooks() -> None:
+    for token in (
+        "--plum: #6c5ce7",
+        "--apricot: #ffb86c",
+        "--mint: #dff7eb",
+        "--rose: #ffe1e8",
+        "--ink: #2b2141",
+        "--canvas: #fffaf4",
+    ):
+        assert token in PAGE_CSS
+    for hook in (".playful-hero", ".status-pill", "kpi_success", "ai_brief_result"):
+        assert hook in PAGE_CSS
+
+
+def test_playful_theme_has_narrow_layout_rules() -> None:
+    assert "@media (max-width: 768px)" in PAGE_CSS
+    assert "overflow-x: hidden" in PAGE_CSS
+
+
 def test_ai_brief_text_colors_are_scoped_to_result_container() -> None:
     assert ".st-key-ai_brief_result" in PAGE_CSS
     assert ".st-key-ai_brief_result p" in PAGE_CSS
@@ -17,11 +36,12 @@ def test_alert_message_text_uses_high_contrast_color() -> None:
     assert "color: #0f172a !important;" in PAGE_CSS
 
 
-def test_main_content_forces_light_theme_text_without_affecting_sidebar() -> None:
+def test_main_and_sidebar_text_use_explicit_high_contrast_colors() -> None:
     assert '[data-testid="stMain"]' in PAGE_CSS
     assert '[data-testid="stMain"] p' in PAGE_CSS
     assert '[data-testid="stMain"] [data-testid="stCaptionContainer"]' in PAGE_CSS
     assert '[data-testid="stMain"] h1' in PAGE_CSS
     assert "color: #334155 !important;" in PAGE_CSS
     assert "color: #0f172a !important;" in PAGE_CSS
-    assert '[data-testid="stSidebar"] p' not in PAGE_CSS
+    assert '[data-testid="stSidebar"] p' in PAGE_CSS
+    assert "color: #ffffff !important;" in PAGE_CSS
