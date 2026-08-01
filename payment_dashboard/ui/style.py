@@ -287,6 +287,13 @@ div[data-testid="stDataFrame"] {
     input[aria-label="Language / ဘာသာစကား"]
 ) [data-testid="stCaptionContainer"] { color: #0f172a !important; }
 
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(
+    input[aria-label="Language / ဘာသာစကား"]
+) [data-testid="stWidgetLabel"],
+[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(
+    input[aria-label="Language / ဘာသာစကား"]
+) [data-testid="stCaptionContainer"] { color: #ffffff !important; }
+
 [data-testid="stVerticalBlockBorderWrapper"]:has(
     input[aria-label="Language / ဘာသာစကား"]:focus-visible
 ) label[data-baseweb="checkbox"] > div:first-child {
@@ -302,6 +309,11 @@ div[data-testid="stDataFrame"] {
     .playful-hero h1, .hero-subtitle, .status-pill,
     [data-testid="stMetric"], [data-testid="stAlert"] { overflow-wrap: anywhere; }
     [data-testid="stHorizontalBlock"] { flex-wrap: wrap; }
+    [data-testid="stHorizontalBlock"]:has(.st-key-kpi_transactions)
+    > [data-testid="column"] {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
     [data-testid="stMetric"] { padding: 0.85rem 0.9rem; }
     .st-key-ai_brief_result { padding: 1rem; }
 }
