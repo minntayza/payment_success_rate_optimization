@@ -4,9 +4,9 @@
 
 Redesign the existing bilingual Streamlit dashboard into a creative, lovable,
 and approachable academic banking demo without changing its analytics,
-MongoDB behavior, administrator authorization, or AI integration. The interface
-must remain trustworthy, readable, responsive, and usable in English and
-Myanmar.
+MongoDB behavior, or administrator authorization. The interface and generated
+AI brief must remain trustworthy, readable, responsive, and usable in English
+and Myanmar.
 
 ## Visual Direction
 
@@ -37,7 +37,8 @@ Use the approved **story-first overview**:
 5. Success trend and failure analysis side by side on wide screens and stacked
    on narrow screens.
 6. Purple AI Operations Brief card with explicit idle, loading, success, and
-   error states.
+   error states. Its generated output follows the language currently selected
+   by the user: English in English mode and Myanmar in Myanmar mode.
 7. Recent transactions and interpretation guidance.
 8. Visually separated administrator management panel.
 
@@ -53,6 +54,9 @@ page scrolling.
   grouped analytical sections, AI brief presentation, and friendly empty states.
 - `payment_dashboard/app.py` retains data loading, language state, filter state,
   section ordering, and database integration.
+- `payment_dashboard/ai_brief.py` receives the selected language and builds an
+  explicit language-specific prompt. The response is generated directly in the
+  selected language rather than translated after generation.
 - Existing calculation functions, MongoDB reads and mutations, AI requests,
   authentication, and soft-delete semantics remain unchanged.
 
@@ -68,6 +72,11 @@ never reveal credentials or connection strings. Empty filtered results show the
 mascot with a suggestion to reset or broaden filters. Critical alerts retain
 strong contrast and must not rely on color alone.
 
+If the AI provider returns an empty or unusable response, the interface shows a
+localized error and retains the previous valid brief where possible. Generated
+text must not mix languages unless a proper noun, gateway label, or technical
+term has no natural Myanmar equivalent.
+
 ## Verification
 
 Add regression tests for stable CSS hooks, bilingual UI labels, section output,
@@ -75,10 +84,12 @@ and database fallback presentation. Preserve existing analytics and integration
 tests. Completion requires the full pytest suite, Ruff lint and formatting
 checks, and browser verification at desktop and narrow viewport widths. Verify
 English and Myanmar modes, filter updates, AI brief states, fallback messaging,
-and administrator panel separation.
+and administrator panel separation. AI tests must verify that the selected
+language reaches the prompt, English mode requests English output, and Myanmar
+mode requests Myanmar output.
 
 ## Out of Scope
 
 This redesign does not change transaction schemas, generated gateway data,
 analytics definitions, MongoDB collections, authentication rules, AI model
-configuration, or deployment architecture.
+provider configuration, or deployment architecture.
