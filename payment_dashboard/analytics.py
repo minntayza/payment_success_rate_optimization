@@ -61,9 +61,7 @@ def success_rate_series(
     frequency: str = "15min",
 ) -> pd.DataFrame:
     if frame.empty:
-        return pd.DataFrame(
-            columns=["Timestamp", "success_rate", "transaction_count"]
-        )
+        return pd.DataFrame(columns=["Timestamp", "success_rate", "transaction_count"])
     working = frame.assign(
         is_success=frame["Transaction Status"].eq("Success").astype(int)
     ).set_index("Timestamp")

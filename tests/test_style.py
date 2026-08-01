@@ -22,8 +22,8 @@ def test_playful_theme_has_narrow_layout_rules() -> None:
     assert "overflow-x: hidden" in PAGE_CSS
     assert '[data-testid="stHorizontalBlock"]:has(.st-key-kpi_transactions)' in PAGE_CSS
     assert '[data-testid="stColumn"]' in PAGE_CSS
-    assert 'flex: 1 1 100%;' in PAGE_CSS
-    assert 'min-width: 100%;' in PAGE_CSS
+    assert "flex: 1 1 100%;" in PAGE_CSS
+    assert "min-width: 100%;" in PAGE_CSS
 
 
 def test_empty_state_bounds_and_integrates_mascot() -> None:

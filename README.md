@@ -18,7 +18,8 @@ be interpreted as measurements of real banks or payment gateways.
 - Latest-50 rolling gateway monitoring
 - Alerts for drops of at least 10 percentage points below baseline
 - Top-of-page English/မြန်မာ language switch
-- Button-triggered English AI Operations Brief generated with MiMo 2.5 Pro
+- Button-triggered AI Operations Brief in the active dashboard language,
+  generated with MiMo 2.5 Pro
 - Interactive Plotly charts and recent-transaction investigation
 - MongoDB Atlas document storage with public read-only analytics
 - Hashed-password administrator login with create, edit, and soft-delete controls
@@ -113,8 +114,10 @@ automatically. Stop the server with `Ctrl+C`.
    arrived.
 3. Use sidebar filters to narrow the displayed KPIs, charts, and transaction
    table.
-4. Click **Generate AI Brief** for an English summary of the current filtered
-   view. The output is retained until the underlying metrics change.
+4. Click **Generate AI Brief** for a summary of the current filtered view in the
+   active dashboard language. The output is retained until the underlying
+   metrics or language change. Switching languages invalidates the previous
+   brief, so generate a new one after the switch.
 5. Expand **Evidence sent to the AI model** to compare the generated text
    with the exact aggregate facts supplied to MiMo.
 6. Review Gateway Health to compare each baseline with its latest 50 replayed
@@ -125,9 +128,10 @@ automatically. Stop the server with `Ctrl+C`.
 9. The administrator can expand **Administrator transaction manager**, enter the
    configured password, and create, edit, or soft-delete simulated records.
 
-The AI brief is English-only, uses simulated gateway data, and is not real
-financial or routing advice. If configuration is missing or the provider is
-unavailable, the dashboard shows an actionable error without exposing the key.
+The AI brief follows the active dashboard language, uses simulated gateway data,
+and is not real financial or routing advice. If configuration is missing or the
+provider is unavailable, the dashboard shows an actionable error without
+exposing the key.
 
 Display filters do not change alert calculations. Alerts always use the
 unfiltered chronological replay stream.

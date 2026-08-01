@@ -14,9 +14,7 @@ def transactions(
     statuses = ["Success"] * successes + ["Failed"] * failures
     return pd.DataFrame(
         {
-            "Transaction ID": [
-                f"{prefix}{index}" for index in range(len(statuses))
-            ],
+            "Transaction ID": [f"{prefix}{index}" for index in range(len(statuses))],
             "Bank Gateway": gateway,
             "Transaction Status": statuses,
         }
