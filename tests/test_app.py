@@ -15,7 +15,11 @@ from streamlit.testing.v1 import AppTest
 
 import payment_dashboard.app as app_module
 import payment_dashboard.ui.sections as sections_module
-from payment_dashboard.ai_brief import AIBriefError
+from payment_dashboard.ai_brief import (
+    AIBriefError,
+    build_brief_facts,
+    facts_fingerprint,
+)
 from payment_dashboard.alerting import evaluate_alerts
 from payment_dashboard.app import (
     _render_language_toggle,
@@ -28,6 +32,7 @@ from payment_dashboard.ui.sections import (
     render_gateway_health,
     render_kpis,
     render_recent_transactions,
+    render_story_hero,
 )
 
 
@@ -263,6 +268,68 @@ def test_kpis_render_burmese_labels(
 
 
 @pytest.mark.integration
+def test_story_hero_renders_localized_semantic_wrapper(
+    monkeypatch: MonkeyPatch, dashboard_state: DashboardState
+) -> None:
+    rendered: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        sections_module.st,
+        "markdown",
+        lambda body, **kwargs: rendered.append((body, kwargs["unsafe_allow_html"])),
+    )
+
+    render_story_hero(dashboard_state, database_source="mongodb", language="en")
+
+    assert rendered == [
+        (
+            '<section class="playful-hero">\n'
+            '  <p class="hero-eyebrow">Payment pulse</p>\n'
+            "  <h1>120 payments made it through ✦</h1>\n"
+            '  <p class="hero-subtitle">50.0% success rate · '
+            "11.0 ms average latency</p>\n"
+            '  <span class="status-pill">Live MongoDB data</span>\n'
+            "</section>",
+            True,
+        )
+    ]
+
+
+@pytest.mark.integration
+def test_kpis_render_stable_containers_and_labels(
+    monkeypatch: MonkeyPatch, dashboard_state: DashboardState
+) -> None:
+    container_keys: list[str] = []
+
+    class Column:
+        def __init__(self) -> None:
+            self.metric = MagicMock()
+
+        def container(self, *, key: str):
+            container_keys.append(key)
+            return nullcontext()
+
+    columns = [Column() for _ in range(5)]
+    monkeypatch.setattr(sections_module.st, "columns", lambda count: columns)
+
+    render_kpis(dashboard_state, language="en")
+
+    assert container_keys == [
+        "kpi_transactions",
+        "kpi_success",
+        "kpi_failed",
+        "kpi_latency",
+        "kpi_alerts",
+    ]
+    assert [column.metric.call_args.args[0] for column in columns] == [
+        "Transactions",
+        "Success rate",
+        "Failed",
+        "Average latency",
+        "Active alerts",
+    ]
+
+
+@pytest.mark.integration
 def test_gateway_health_keeps_gateway_values(
     monkeypatch: MonkeyPatch, dashboard_state: DashboardState
 ) -> None:
@@ -368,7 +435,11 @@ def test_ai_brief_click_stores_text_and_evidence(
     monkeypatch.setattr(sections_module.st, "container", capture_container)
     monkeypatch.setattr(sections_module.st, "expander", lambda *_: nullcontext())
     monkeypatch.setattr(sections_module.st, "json", evidence.append)
-    monkeypatch.setattr(sections_module, "generate_brief", lambda facts: "AI result")
+    monkeypatch.setattr(
+        sections_module,
+        "generate_brief",
+        lambda facts, *, language: "AI result",
+    )
 
     render_ai_operations_brief(dashboard_state)
 
@@ -379,6 +450,28 @@ def test_ai_brief_click_stores_text_and_evidence(
     assert evidence and evidence[0]["transaction_count"] == len(
         dashboard_state.display_frame
     )
+
+
+@pytest.mark.integration
+def test_ai_brief_passes_selected_language(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    generated = MagicMock(return_value="မြန်မာ AI အနှစ်ချုပ်")
+    monkeypatch.setattr(sections_module.st, "session_state", {})
+    monkeypatch.setattr(sections_module.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "button", lambda *_, **__: True)
+    monkeypatch.setattr(sections_module.st, "spinner", lambda *_: nullcontext())
+    monkeypatch.setattr(sections_module.st, "container", lambda *_, **__: nullcontext())
+    monkeypatch.setattr(sections_module.st, "expander", lambda *_: nullcontext())
+    monkeypatch.setattr(sections_module.st, "markdown", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "json", lambda *_: None)
+    monkeypatch.setattr(sections_module, "generate_brief", generated)
+
+    render_ai_operations_brief(dashboard_state, language="my")
+
+    assert generated.call_args.kwargs["language"] == "my"
 
 
 @pytest.mark.integration
@@ -398,6 +491,32 @@ def test_ai_brief_invalidates_stale_text(
     monkeypatch.setattr(sections_module.st, "markdown", rendered.append)
 
     render_ai_operations_brief(dashboard_state)
+
+    assert "ai_brief_text" not in session
+    assert "ai_brief_fingerprint" not in session
+    assert rendered == []
+
+
+@pytest.mark.integration
+def test_ai_brief_invalidates_text_from_another_language(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    facts = build_brief_facts(dashboard_state.display_frame, dashboard_state.alerts)
+    session: dict[str, object] = {
+        "ai_brief_text": "English brief",
+        "ai_brief_fingerprint": facts_fingerprint(facts),
+    }
+    rendered: list[str] = []
+    monkeypatch.setattr(sections_module.st, "session_state", session)
+    monkeypatch.setattr(sections_module.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(sections_module.st, "button", lambda *_, **__: False)
+    monkeypatch.setattr(sections_module.st, "markdown", rendered.append)
+    monkeypatch.setattr(sections_module.st, "container", lambda *_, **__: nullcontext())
+    monkeypatch.setattr(sections_module.st, "expander", lambda *_: nullcontext())
+
+    render_ai_operations_brief(dashboard_state, language="my")
 
     assert "ai_brief_text" not in session
     assert "ai_brief_fingerprint" not in session

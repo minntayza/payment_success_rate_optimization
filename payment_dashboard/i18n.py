@@ -51,6 +51,29 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "kpi.failed": "Failed",
         "kpi.average_latency": "Average latency",
         "kpi.active_alerts": "Active alerts",
+        "hero.eyebrow": "Payment pulse",
+        "hero.title": "{successful:,} payments made it through ✦",
+        "hero.subtitle": (
+            "{success_rate:.1%} success rate · {average_latency_ms:.1f} ms "
+            "average latency"
+        ),
+        "hero.database_live": "Live MongoDB data",
+        "hero.demo_mode": "Demo data",
+        "actions.reset_filters": "Reset filters",
+        "empty.title": "No matching payments",
+        "empty.body": "Try resetting one or more filters to see transactions.",
+        "ai.title": "AI operations brief",
+        "ai.description": (
+            "Generate a concise summary with MiMo 2.5 Pro. Only aggregate "
+            "dashboard metrics are shared."
+        ),
+        "ai.generate": "Generate AI brief",
+        "ai.generating": "Generating AI brief...",
+        "ai.evidence": "Evidence sent to the AI model",
+        "ai.requires_data": (
+            "Select filters that return transactions before generating a brief."
+        ),
+        "ai.invalid_response": "The AI provider returned an invalid response.",
         "health.title": "Gateway health",
         "health.description": (
             "An alert triggers when a gateway's latest 50 transactions fall at "
@@ -176,6 +199,26 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "kpi.failed": "မအောင်မြင်သော",
         "kpi.average_latency": "ပျမ်းမျှ ကြာချိန်",
         "kpi.active_alerts": "လက်ရှိ သတိပေးချက်များ",
+        "hero.eyebrow": "ငွေပေးချေမှု အခြေအနေ",
+        "hero.title": "ငွေပေးချေမှု {successful:,} ခု အောင်မြင်ခဲ့သည် ✦",
+        "hero.subtitle": (
+            "အောင်မြင်နှုန်း {success_rate:.1%} · ပျမ်းမျှ တုံ့ပြန်ချိန် {average_latency_ms:.1f} ms"
+        ),
+        "hero.database_live": "MongoDB မှ တိုက်ရိုက်ဒေတာ",
+        "hero.demo_mode": "သရုပ်ပြဒေတာ",
+        "actions.reset_filters": "စစ်ထုတ်မှုများ ပြန်လည်သတ်မှတ်ရန်",
+        "empty.title": "ကိုက်ညီသော ငွေပေးချေမှု မရှိပါ",
+        "empty.body": "ငွေပေးချေမှုများကို မြင်ရန် စစ်ထုတ်မှုတစ်ခု သို့မဟုတ် အချို့ကို ပြန်လည်သတ်မှတ်ပါ။",
+        "ai.title": "AI လုပ်ငန်းဆောင်ရွက်မှု အနှစ်ချုပ်",
+        "ai.description": (
+            "MiMo 2.5 Pro ဖြင့် တိုတောင်းသော အနှစ်ချုပ်ကို ဖန်တီးပါ။ "
+            "စုစုပေါင်း dashboard ကိန်းဂဏန်းများကိုသာ မျှဝေသည်။"
+        ),
+        "ai.generate": "AI အနှစ်ချုပ် ဖန်တီးရန်",
+        "ai.generating": "AI အနှစ်ချုပ် ဖန်တီးနေသည်...",
+        "ai.evidence": "AI မော်ဒယ်သို့ ပေးပို့ထားသော အထောက်အထား",
+        "ai.requires_data": ("အနှစ်ချုပ် မဖန်တီးမီ ငွေပေးချေမှုများ ပြန်ပေးသည့် စစ်ထုတ်မှုများကို ရွေးပါ။"),
+        "ai.invalid_response": "AI ဝန်ဆောင်မှုပေးသူမှ မမှန်ကန်သော အဖြေ ပြန်လည်ပေးပို့ခဲ့သည်။",
         "health.title": "Gateway အခြေအနေ",
         "health.description": (
             "Gateway တစ်ခု၏ နောက်ဆုံး ငွေပေးချေမှု ၅၀ ခုသည် dataset တစ်ခုလုံး၏ "

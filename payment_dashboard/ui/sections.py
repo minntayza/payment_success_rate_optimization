@@ -49,32 +49,69 @@ AI_BRIEF_TEXT_KEY = "ai_brief_text"
 AI_BRIEF_FINGERPRINT_KEY = "ai_brief_fingerprint"
 
 
-def render_ai_operations_brief(state: DashboardState) -> None:
-    """Render button-triggered English analysis from aggregate facts."""
-    st.subheader("AI Operations Brief")
-    st.caption(
-        "Generate an English summary with MiMo 2.5 Pro. "
-        "Only aggregate dashboard metrics are shared."
+def build_story_hero_html(
+    successful: int,
+    metrics: dict[str, int | float],
+    status_key: str,
+    language: Language,
+) -> str:
+    """Build the localized, stable HTML structure for the dashboard story hero."""
+    return "\n".join(
+        (
+            '<section class="playful-hero">',
+            f'  <p class="hero-eyebrow">{translate("hero.eyebrow", language)}</p>',
+            f"  <h1>{translate('hero.title', language, successful=successful)}</h1>",
+            '  <p class="hero-subtitle">'
+            f"{translate('hero.subtitle', language, **metrics)}</p>",
+            f'  <span class="status-pill">{translate(status_key, language)}</span>',
+            "</section>",
+        )
     )
+
+
+def render_story_hero(
+    state: DashboardState,
+    database_source: str,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
+    """Render the localized success-first dashboard story."""
+    metrics = summary_metrics(state.display_frame)
+    successful = int(metrics["transaction_count"] - metrics["failed_count"])
+    status_key = (
+        "hero.database_live" if database_source == "mongodb" else "hero.demo_mode"
+    )
+    st.markdown(
+        build_story_hero_html(successful, metrics, status_key, language),
+        unsafe_allow_html=True,
+    )
+
+
+def render_ai_operations_brief(
+    state: DashboardState,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
+    """Render analysis from aggregate facts in the selected language."""
+    st.subheader(translate("ai.title", language))
+    st.caption(translate("ai.description", language))
     facts = build_brief_facts(state.display_frame, state.alerts)
-    fingerprint = facts_fingerprint(facts)
+    fingerprint = facts_fingerprint({"language": language, "facts": facts})
 
     if st.session_state.get(AI_BRIEF_FINGERPRINT_KEY) != fingerprint:
         st.session_state.pop(AI_BRIEF_TEXT_KEY, None)
         st.session_state.pop(AI_BRIEF_FINGERPRINT_KEY, None)
 
     generate = st.button(
-        "Generate AI Brief",
+        translate("ai.generate", language),
         disabled=state.display_frame.empty,
         type="primary",
     )
     if state.display_frame.empty:
-        st.info("Select filters that return transactions before generating a brief.")
+        st.info(translate("ai.requires_data", language))
 
     if generate:
         try:
-            with st.spinner("Generating AI brief..."):
-                brief = generate_brief(facts)
+            with st.spinner(translate("ai.generating", language)):
+                brief = generate_brief(facts, language=language)
         except AIBriefError as exc:
             st.error(str(exc))
         else:
@@ -85,7 +122,7 @@ def render_ai_operations_brief(state: DashboardState) -> None:
     if isinstance(brief_text, str):
         with st.container(key="ai_brief_result"):
             st.markdown(brief_text)
-        with st.expander("Evidence sent to the AI model"):
+        with st.expander(translate("ai.evidence", language)):
             st.json(facts)
 
 
@@ -97,19 +134,32 @@ def render_kpis(
     metrics = summary_metrics(state.display_frame)
     active_alerts = int(state.alerts["is_alert"].sum())
 
-    cols = st.columns(5)
-    cols[0].metric(
-        translate("kpi.transactions", language), f"{metrics['transaction_count']:,}"
+    kpis = (
+        (
+            "kpi_transactions",
+            translate("kpi.transactions", language),
+            f"{metrics['transaction_count']:,}",
+        ),
+        (
+            "kpi_success",
+            translate("kpi.success_rate", language),
+            f"{metrics['success_rate']:.1%}",
+        ),
+        (
+            "kpi_failed",
+            translate("kpi.failed", language),
+            f"{metrics['failed_count']:,}",
+        ),
+        (
+            "kpi_latency",
+            translate("kpi.average_latency", language),
+            f"{metrics['average_latency_ms']:.1f} ms",
+        ),
+        ("kpi_alerts", translate("kpi.active_alerts", language), active_alerts),
     )
-    cols[1].metric(
-        translate("kpi.success_rate", language), f"{metrics['success_rate']:.1%}"
-    )
-    cols[2].metric(translate("kpi.failed", language), f"{metrics['failed_count']:,}")
-    cols[3].metric(
-        translate("kpi.average_latency", language),
-        f"{metrics['average_latency_ms']:.1f} ms",
-    )
-    cols[4].metric(translate("kpi.active_alerts", language), active_alerts)
+    for column, (key, label, value) in zip(st.columns(5), kpis, strict=True):
+        with column.container(key=key):
+            column.metric(label, value)
 
 
 def render_gateway_health(

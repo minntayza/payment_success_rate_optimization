@@ -9,9 +9,32 @@ from payment_dashboard.i18n import (
     translate,
 )
 
+PLAYFUL_KEYS = {
+    "hero.eyebrow",
+    "hero.title",
+    "hero.subtitle",
+    "hero.database_live",
+    "hero.demo_mode",
+    "actions.reset_filters",
+    "empty.title",
+    "empty.body",
+    "ai.title",
+    "ai.description",
+    "ai.generate",
+    "ai.generating",
+    "ai.evidence",
+    "ai.requires_data",
+    "ai.invalid_response",
+}
+
 
 def test_translation_catalogs_have_matching_keys() -> None:
     assert set(TRANSLATIONS["en"]) == set(TRANSLATIONS["my"])
+
+
+def test_playful_dashboard_copy_exists_in_both_languages() -> None:
+    for language in ("en", "my"):
+        assert all(TRANSLATIONS[language][key].strip() for key in PLAYFUL_KEYS)
 
 
 def test_english_is_default_and_burmese_is_supported() -> None:
