@@ -505,7 +505,7 @@ def test_ai_brief_invalidates_text_from_another_language(
     facts = build_brief_facts(dashboard_state.display_frame, dashboard_state.alerts)
     session: dict[str, object] = {
         "ai_brief_text": "English brief",
-        "ai_brief_fingerprint": facts_fingerprint(facts),
+        "ai_brief_fingerprint": facts_fingerprint({"language": "en", "facts": facts}),
     }
     rendered: list[str] = []
     monkeypatch.setattr(sections_module.st, "session_state", session)
