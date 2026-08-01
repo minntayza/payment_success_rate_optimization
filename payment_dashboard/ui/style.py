@@ -289,7 +289,8 @@ div[data-testid="stDataFrame"] {
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(
     input[aria-label="Language / ဘာသာစကား"]
-) [data-testid="stWidgetLabel"],
+) [data-testid="stWidgetLabel"] { color: #ffffff !important; }
+
 [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:has(
     input[aria-label="Language / ဘာသာစကား"]
 ) [data-testid="stCaptionContainer"] { color: #ffffff !important; }
@@ -310,7 +311,7 @@ div[data-testid="stDataFrame"] {
     [data-testid="stMetric"], [data-testid="stAlert"] { overflow-wrap: anywhere; }
     [data-testid="stHorizontalBlock"] { flex-wrap: wrap; }
     [data-testid="stHorizontalBlock"]:has(.st-key-kpi_transactions)
-    > [data-testid="column"] {
+    > [data-testid="stColumn"] {
         flex: 1 1 100%;
         min-width: 100%;
     }

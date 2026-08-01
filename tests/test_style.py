@@ -21,17 +21,25 @@ def test_playful_theme_has_narrow_layout_rules() -> None:
     assert "@media (max-width: 768px)" in PAGE_CSS
     assert "overflow-x: hidden" in PAGE_CSS
     assert '[data-testid="stHorizontalBlock"]:has(.st-key-kpi_transactions)' in PAGE_CSS
+    assert '[data-testid="stColumn"]' in PAGE_CSS
     assert 'flex: 1 1 100%;' in PAGE_CSS
     assert 'min-width: 100%;' in PAGE_CSS
 
 
 def test_sidebar_language_control_keeps_its_text_high_contrast() -> None:
+    sidebar_widget_label_rule = (
+        '[data-testid="stSidebar"] '
+        '[data-testid="stVerticalBlockBorderWrapper"]:has(\n'
+        '    input[aria-label="Language / ဘာသာစကား"]\n'
+        ') [data-testid="stWidgetLabel"] { color: #ffffff !important; }'
+    )
     sidebar_caption_rule = (
         '[data-testid="stSidebar"] '
         '[data-testid="stVerticalBlockBorderWrapper"]:has(\n'
         '    input[aria-label="Language / ဘာသာစကား"]\n'
         ') [data-testid="stCaptionContainer"] { color: #ffffff !important; }'
     )
+    assert sidebar_widget_label_rule in PAGE_CSS
     assert sidebar_caption_rule in PAGE_CSS
 
 
