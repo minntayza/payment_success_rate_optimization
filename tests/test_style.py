@@ -1,6 +1,36 @@
 """Tests for page-level dashboard styling."""
 
+import re
+
 from payment_dashboard.ui.style import PAGE_CSS
+
+
+def _relative_luminance(color: str) -> float:
+    channels = [int(color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+    linear = [
+        value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+        for value in channels
+    ]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast_ratio(first: str, second: str) -> float:
+    light, dark = sorted(
+        (_relative_luminance(first), _relative_luminance(second)), reverse=True
+    )
+    return (light + 0.05) / (dark + 0.05)
+
+
+def _composite(base: str, overlay: tuple[int, int, int, float]) -> str:
+    base_channels = [int(base[index : index + 2], 16) for index in (1, 3, 5)]
+    red, green, blue, alpha = overlay
+    channels = [
+        round(alpha * foreground + (1 - alpha) * background)
+        for foreground, background in zip(
+            (red, green, blue), base_channels, strict=True
+        )
+    ]
+    return "#" + "".join(f"{channel:02x}" for channel in channels)
 
 
 def test_playful_theme_exposes_design_tokens_and_component_hooks() -> None:
@@ -13,8 +43,39 @@ def test_playful_theme_exposes_design_tokens_and_component_hooks() -> None:
         "--canvas: #fffaf4",
     ):
         assert token in PAGE_CSS
-    for hook in (".playful-hero", ".status-pill", "kpi_success", "ai_brief_result"):
+    for hook in (
+        ".playful-hero",
+        ".status-pill",
+        "kpi_success",
+        "ai_brief_card",
+        "ai_brief_result",
+    ):
         assert hook in PAGE_CSS
+
+
+def test_hero_normal_text_has_wcag_aa_contrast_across_background() -> None:
+    root_colors = dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})", PAGE_CSS))
+    hero_rule = re.search(r"\.playful-hero \{(.*?)\n\}", PAGE_CSS, re.DOTALL)
+    assert hero_rule is not None
+    gradient = re.search(r"background:\s*linear-gradient\((.*)\);", hero_rule.group(1))
+    assert gradient is not None
+    tokens = re.findall(r"var\((--[\w-]+)\)|(#[0-9a-fA-F]{6})", gradient.group(1))
+    backgrounds = [root_colors[name] if name else literal for name, literal in tokens]
+    decorative_overlays = (
+        (15, 23, 42, 0.18),
+        (15, 23, 42, 0.12),
+    )
+
+    tested_backgrounds = backgrounds + [
+        _composite(background, overlay)
+        for background in backgrounds
+        for overlay in decorative_overlays
+    ]
+
+    assert tested_backgrounds
+    assert min(_contrast_ratio("#ffffff", color) for color in tested_backgrounds) >= 4.5
+    assert "background: rgba(15, 23, 42, 0.18);" in PAGE_CSS
+    assert "background: rgba(15, 23, 42, 0.12);" in PAGE_CSS
 
 
 def test_playful_theme_has_narrow_layout_rules() -> None:
@@ -60,10 +121,41 @@ def test_ai_brief_text_colors_are_scoped_to_result_container() -> None:
     assert "color: #0f172a !important;" in PAGE_CSS
 
 
+def test_entire_ai_feature_has_purple_card_and_readable_text() -> None:
+    card_rule = re.search(r"\.st-key-ai_brief_card \{(.*?)\n\}", PAGE_CSS, re.DOTALL)
+    assert card_rule is not None
+    assert "background: linear-gradient" in card_rule.group(1)
+    assert "border-radius: var(--radius-lg);" in card_rule.group(1)
+    assert ".st-key-ai_brief_card p" in PAGE_CSS
+    assert ".st-key-ai_brief_card h2" in PAGE_CSS
+    assert "color: #ffffff !important;" in PAGE_CSS
+
+
 def test_alert_message_text_uses_high_contrast_color() -> None:
     assert '[data-testid="stAlert"]' in PAGE_CSS
     assert '[data-testid="stAlert"] p' in PAGE_CSS
     assert "color: #0f172a !important;" in PAGE_CSS
+
+
+def test_alert_kinds_use_distinct_semantic_treatments() -> None:
+    backgrounds: set[str] = set()
+    borders: set[str] = set()
+    for kind in ("Success", "Info", "Error", "Warning"):
+        rule = re.search(
+            rf'\[data-testid="stNotificationContent{kind}"\] \{{(.*?)\n\}}',
+            PAGE_CSS,
+            re.DOTALL,
+        )
+        assert rule is not None
+        background = re.search(r"background:\s*(#[0-9a-fA-F]{6})", rule.group(1))
+        border = re.search(r"border-left:\s*5px solid (#[0-9a-fA-F]{6})", rule.group(1))
+        assert background is not None
+        assert border is not None
+        backgrounds.add(background.group(1).lower())
+        borders.add(border.group(1).lower())
+
+    assert len(backgrounds) == 4
+    assert len(borders) == 4
 
 
 def test_main_and_sidebar_text_use_explicit_high_contrast_colors() -> None:

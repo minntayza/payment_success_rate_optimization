@@ -25,6 +25,8 @@ PLAYFUL_KEYS = {
     "ai.evidence",
     "ai.requires_data",
     "ai.invalid_response",
+    "database.fallback_not_configured",
+    "database.fallback_unavailable",
 }
 
 

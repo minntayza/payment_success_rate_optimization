@@ -73,7 +73,15 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "ai.requires_data": (
             "Select filters that return transactions before generating a brief."
         ),
-        "ai.invalid_response": "The AI provider returned an invalid response.",
+        "ai.invalid_response": (
+            "The AI brief could not be generated. Please try again."
+        ),
+        "database.fallback_not_configured": (
+            "The database is not configured, so demo data is being shown."
+        ),
+        "database.fallback_unavailable": (
+            "The database is temporarily unavailable, so demo data is being shown."
+        ),
         "health.title": "Gateway health",
         "health.description": (
             "An alert triggers when a gateway's latest 50 transactions fall at "
@@ -218,7 +226,13 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "ai.generating": "AI အနှစ်ချုပ် ဖန်တီးနေသည်...",
         "ai.evidence": "AI မော်ဒယ်သို့ ပေးပို့ထားသော အထောက်အထား",
         "ai.requires_data": ("အနှစ်ချုပ် မဖန်တီးမီ ငွေပေးချေမှုများ ပြန်ပေးသည့် စစ်ထုတ်မှုများကို ရွေးပါ။"),
-        "ai.invalid_response": "AI ဝန်ဆောင်မှုပေးသူမှ မမှန်ကန်သော အဖြေ ပြန်လည်ပေးပို့ခဲ့သည်။",
+        "ai.invalid_response": "AI အနှစ်ချုပ်ကို မဖန်တီးနိုင်ပါ။ ထပ်မံကြိုးစားပါ။",
+        "database.fallback_not_configured": (
+            "ဒေတာဘေ့စ်ကို သတ်မှတ်မထားသဖြင့် သရုပ်ပြဒေတာကို ပြသထားသည်။"
+        ),
+        "database.fallback_unavailable": (
+            "ဒေတာဘေ့စ်ကို ယာယီ အသုံးမပြုနိုင်သဖြင့် သရုပ်ပြဒေတာကို ပြသထားသည်။"
+        ),
         "health.title": "Gateway အခြေအနေ",
         "health.description": (
             "Gateway တစ်ခု၏ နောက်ဆုံး ငွေပေးချေမှု ၅၀ ခုသည် dataset တစ်ခုလုံး၏ "

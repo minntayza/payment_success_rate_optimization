@@ -21,10 +21,10 @@ from payment_dashboard.data_loader import load_transactions
 from payment_dashboard.prepare_data import assign_gateways
 
 
-@pytest.mark.integration
-def test_language_toggle_preserves_filters_and_translates_reset(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _run_prepared_app(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[AppTest, date, date]:
     prepared_path = tmp_path / "prepared_transactions.csv"
     prepared = _make_transactions(200)
     prepared["Timestamp"] = pd.date_range(
@@ -34,9 +34,16 @@ def test_language_toggle_preserves_filters_and_translates_reset(
     )
     prepared.to_csv(prepared_path, index=False)
     monkeypatch.setenv("PAYMENT_DATA_PATH", str(prepared_path))
-
     app_path = Path(__file__).parents[1] / "payment_dashboard" / "app.py"
     app = AppTest.from_file(str(app_path)).run(timeout=10)
+    return app, prepared["Timestamp"].min().date(), prepared["Timestamp"].max().date()
+
+
+@pytest.mark.integration
+def test_language_toggle_preserves_filters_and_translates_reset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, _, _ = _run_prepared_app(tmp_path, monkeypatch)
     english_gateway_options = app.sidebar.multiselect[0].options
 
     assert app.title[0].value == "Payment Success Monitor"
@@ -72,6 +79,28 @@ def test_language_toggle_preserves_filters_and_translates_reset(
         date(2025, 6, 2),
         date(2025, 6, 3),
     )
+
+
+@pytest.mark.integration
+def test_reset_filters_button_restores_widget_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, minimum_date, maximum_date = _run_prepared_app(tmp_path, monkeypatch)
+    app.sidebar.slider[0].set_value(120)
+    app.sidebar.multiselect[0].set_value(["Gateway A"])
+    app.sidebar.multiselect[1].set_value(["Transfer"])
+    app.sidebar.multiselect[2].set_value(["Mobile"])
+    app.sidebar.multiselect[3].set_value(["Success"])
+    app.sidebar.date_input[0].set_value((date(2025, 6, 2), date(2025, 6, 3)))
+    app.run(timeout=10)
+
+    app.sidebar.button[0].click().run(timeout=10)
+
+    assert app.sidebar.slider[0].value == 120
+    assert [widget.value for widget in app.sidebar.multiselect] == [[], [], [], []]
+    assert app.sidebar.date_input[0].value == (minimum_date, maximum_date)
+    assert not app.exception
 
 
 # ---------------------------------------------------------------------------

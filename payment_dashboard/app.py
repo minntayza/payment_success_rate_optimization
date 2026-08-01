@@ -293,7 +293,7 @@ def render_app() -> None:
     database_result = _load_data(language)
     full_frame = database_result.frame
     if database_result.message:
-        st.info(database_result.message)
+        st.info(translate(database_result.message, language))
     resources = (
         create_resources_from_env() if database_result.source == "mongodb" else None
     )
@@ -315,21 +315,20 @@ def render_app() -> None:
 
     render_story_hero(state, database_result.source, language)
     render_kpis(state, language)
-    render_ai_operations_brief(state, language)
     render_gateway_health(state.alerts, language)
 
     if state.display_frame.empty:
         render_empty_state(language)
-        return
-
-    render_gateway_performance(state.display_frame, language)
-    trend_column, failure_column = st.columns(2)
-    with trend_column:
-        render_success_trend(state.display_frame, language)
-    with failure_column:
-        render_failure_analysis(state.display_frame, language)
-    render_recent_transactions(state.display_frame, language)
-    render_interpretation_guide(language)
+    else:
+        render_gateway_performance(state.display_frame, language)
+        trend_column, failure_column = st.columns(2)
+        with trend_column:
+            render_success_trend(state.display_frame, language)
+        with failure_column:
+            render_failure_analysis(state.display_frame, language)
+        render_ai_operations_brief(state, language)
+        render_recent_transactions(state.display_frame, language)
+        render_interpretation_guide(language)
 
     with st.container(border=True):
         if render_admin_panel(

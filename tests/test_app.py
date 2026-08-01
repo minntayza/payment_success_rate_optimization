@@ -304,6 +304,21 @@ def _patch_render_app_shell(
     return containers, rerun
 
 
+def _track_renderers(
+    monkeypatch: MonkeyPatch,
+    calls: list[str],
+    *renderers: tuple[str, str],
+) -> None:
+    """Record section composition without replacing application orchestration."""
+    for name, call_name in renderers:
+        monkeypatch.setattr(
+            app_module,
+            name,
+            lambda *_args, _call_name=call_name, **_kwargs: calls.append(_call_name),
+            raising=False,
+        )
+
+
 @pytest.mark.integration
 def test_story_first_composition_and_admin_rerun(
     monkeypatch: MonkeyPatch,
@@ -312,11 +327,11 @@ def test_story_first_composition_and_admin_rerun(
     expected = [
         "hero",
         "kpis",
-        "ai",
         "gateway_health",
         "gateway_performance",
         "success_trend",
         "failure_analysis",
+        "ai",
         "recent",
         "guide",
     ]
@@ -350,19 +365,16 @@ def test_story_first_composition_and_admin_rerun(
         lambda *_args, **_kwargs: calls.append("kpis"),
     )
     monkeypatch.setattr(app_module, "render_ai_operations_brief", render_ai)
-    for name, call_name in (
+    _track_renderers(
+        monkeypatch,
+        calls,
         ("render_gateway_health", "gateway_health"),
         ("render_gateway_performance", "gateway_performance"),
         ("render_success_trend", "success_trend"),
         ("render_failure_analysis", "failure_analysis"),
         ("render_recent_transactions", "recent"),
         ("render_interpretation_guide", "guide"),
-    ):
-        monkeypatch.setattr(
-            app_module,
-            name,
-            lambda *_args, _call_name=call_name, **_kwargs: calls.append(_call_name),
-        )
+    )
     monkeypatch.setattr(app_module, "render_admin_panel", render_admin)
 
     app_module.render_app()
@@ -374,7 +386,7 @@ def test_story_first_composition_and_admin_rerun(
 
 
 @pytest.mark.integration
-def test_empty_state_stops_chart_and_table_composition(
+def test_empty_state_skips_data_sections_but_keeps_admin_manager(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
 ) -> None:
@@ -384,10 +396,16 @@ def test_empty_state_stops_chart_and_table_composition(
         dashboard_state.alerts,
     )
     calls: list[str] = []
-    admin = MagicMock(return_value=False)
-    _patch_render_app_shell(monkeypatch, empty_state)
+    admin_snapshots: list[list[str]] = []
+    containers, _ = _patch_render_app_shell(monkeypatch, empty_state)
 
-    for name, call_name in (
+    def render_admin(*_args: object, **_kwargs: object) -> bool:
+        admin_snapshots.append(calls.copy())
+        return False
+
+    _track_renderers(
+        monkeypatch,
+        calls,
         ("render_story_hero", "hero"),
         ("render_kpis", "kpis"),
         ("render_ai_operations_brief", "ai"),
@@ -398,19 +416,50 @@ def test_empty_state_stops_chart_and_table_composition(
         ("render_failure_analysis", "failure_analysis"),
         ("render_recent_transactions", "recent"),
         ("render_interpretation_guide", "guide"),
-    ):
-        monkeypatch.setattr(
-            app_module,
-            name,
-            lambda *_args, _call_name=call_name, **_kwargs: calls.append(_call_name),
-            raising=False,
-        )
-    monkeypatch.setattr(app_module, "render_admin_panel", admin)
+    )
+    monkeypatch.setattr(app_module, "render_admin_panel", render_admin)
 
     app_module.render_app()
 
-    assert calls == ["hero", "kpis", "ai", "gateway_health", "empty_state"]
-    admin.assert_not_called()
+    assert calls == ["hero", "kpis", "gateway_health", "empty_state"]
+    assert admin_snapshots == [calls]
+    assert containers == [{"border": True}]
+
+
+@pytest.mark.integration
+def test_database_fallback_status_uses_selected_language(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    infos: list[str] = []
+    _patch_render_app_shell(monkeypatch, dashboard_state)
+    monkeypatch.setattr(
+        app_module,
+        "_load_data",
+        lambda language: app_module.DatabaseResult(
+            dashboard_state.replay_frame,
+            "fallback",
+            "database.fallback_unavailable",
+        ),
+    )
+    monkeypatch.setattr(app_module.st, "info", infos.append)
+    monkeypatch.setattr(app_module, "render_admin_panel", lambda *_args: False)
+    for name in (
+        "render_story_hero",
+        "render_kpis",
+        "render_gateway_health",
+        "render_gateway_performance",
+        "render_success_trend",
+        "render_failure_analysis",
+        "render_ai_operations_brief",
+        "render_recent_transactions",
+        "render_interpretation_guide",
+    ):
+        monkeypatch.setattr(app_module, name, lambda *_args, **_kwargs: None)
+
+    app_module.render_app()
+
+    assert infos == ["ဒေတာဘေ့စ်ကို ယာယီ အသုံးမပြုနိုင်သဖြင့် သရုပ်ပြဒေတာကို ပြသထားသည်။"]
 
 
 @pytest.mark.integration
@@ -483,13 +532,20 @@ def test_kpis_render_burmese_labels(
     monkeypatch: MonkeyPatch, dashboard_state: DashboardState
 ) -> None:
     columns = [MagicMock() for _ in range(5)]
+    for column in columns:
+        column.container.return_value = nullcontext()
+    metric = MagicMock()
     monkeypatch.setattr(
         "payment_dashboard.ui.sections.st.columns", lambda count: columns
     )
+    monkeypatch.setattr(
+        "payment_dashboard.ui.sections.st.markdown", lambda *_, **__: None
+    )
+    monkeypatch.setattr("payment_dashboard.ui.sections.st.metric", metric)
 
     render_kpis(dashboard_state, language="my")
 
-    assert columns[0].metric.call_args.args[0] == "ငွေပေးချေမှုများ"
+    assert metric.call_args_list[0].args[0] == "ငွေပေးချေမှုများ"
 
 
 @pytest.mark.integration
@@ -524,17 +580,24 @@ def test_kpis_render_stable_containers_and_labels(
     monkeypatch: MonkeyPatch, dashboard_state: DashboardState
 ) -> None:
     container_keys: list[str] = []
+    metrics: list[tuple[str, object]] = []
 
     class Column:
-        def __init__(self) -> None:
-            self.metric = MagicMock()
-
         def container(self, *, key: str):
             container_keys.append(key)
             return nullcontext()
 
+        def metric(self, *_args: object) -> None:
+            pass
+
     columns = [Column() for _ in range(5)]
     monkeypatch.setattr(sections_module.st, "columns", lambda count: columns)
+    monkeypatch.setattr(sections_module.st, "markdown", lambda *_, **__: None)
+    monkeypatch.setattr(
+        sections_module.st,
+        "metric",
+        lambda label, value: metrics.append((label, value)),
+    )
 
     render_kpis(dashboard_state, language="en")
 
@@ -545,13 +608,41 @@ def test_kpis_render_stable_containers_and_labels(
         "kpi_latency",
         "kpi_alerts",
     ]
-    assert [column.metric.call_args.args[0] for column in columns] == [
+    assert [label for label, _ in metrics] == [
         "Transactions",
         "Success rate",
         "Failed",
         "Average latency",
         "Active alerts",
     ]
+
+
+@pytest.mark.integration
+def test_kpis_render_decorative_recognizable_icons(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    rendered: list[tuple[str, bool]] = []
+    columns = [MagicMock() for _ in range(5)]
+    for column in columns:
+        column.container.return_value = nullcontext()
+    monkeypatch.setattr(sections_module.st, "columns", lambda count: columns)
+    monkeypatch.setattr(
+        sections_module.st,
+        "markdown",
+        lambda body, **kwargs: rendered.append((body, kwargs["unsafe_allow_html"])),
+    )
+
+    render_kpis(dashboard_state, language="en")
+
+    assert [body for body, _ in rendered] == [
+        '<span class="kpi-icon" aria-hidden="true">⇄</span>',
+        '<span class="kpi-icon" aria-hidden="true">✓</span>',
+        '<span class="kpi-icon" aria-hidden="true">!</span>',
+        '<span class="kpi-icon" aria-hidden="true">◷</span>',
+        '<span class="kpi-icon" aria-hidden="true">⚑</span>',
+    ]
+    assert all(allows_html for _, allows_html in rendered)
 
 
 @pytest.mark.integration
@@ -671,7 +762,7 @@ def test_ai_brief_click_stores_text_and_evidence(
     assert session["ai_brief_text"] == "AI result"
     assert session["ai_brief_fingerprint"]
     assert markdown == ["AI result"]
-    assert container_keys == ["ai_brief_result"]
+    assert container_keys == ["ai_brief_card", "ai_brief_result"]
     assert evidence and evidence[0]["transaction_count"] == len(
         dashboard_state.display_frame
     )
@@ -714,6 +805,7 @@ def test_ai_brief_invalidates_stale_text(
     monkeypatch.setattr(sections_module.st, "caption", lambda *_: None)
     monkeypatch.setattr(sections_module.st, "button", lambda *_, **__: False)
     monkeypatch.setattr(sections_module.st, "markdown", rendered.append)
+    monkeypatch.setattr(sections_module.st, "container", lambda *_, **__: nullcontext())
 
     render_ai_operations_brief(dashboard_state)
 
@@ -750,16 +842,16 @@ def test_ai_brief_invalidates_text_from_another_language(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("error", "expected"),
+    ("language", "expected"),
     [
-        (AIBriefError("missing ANTHROPIC_API_KEY"), "missing ANTHROPIC_API_KEY"),
-        (AIBriefError("bad provider response"), "bad provider response"),
+        ("en", "The AI brief could not be generated. Please try again."),
+        ("my", "AI အနှစ်ချုပ်ကို မဖန်တီးနိုင်ပါ။ ထပ်မံကြိုးစားပါ။"),
     ],
 )
-def test_ai_brief_shows_generation_errors(
+def test_ai_brief_localizes_generation_errors_without_provider_details(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
-    error: AIBriefError,
+    language: str,
     expected: str,
 ) -> None:
     errors: list[str] = []
@@ -769,12 +861,17 @@ def test_ai_brief_shows_generation_errors(
     monkeypatch.setattr(sections_module.st, "button", lambda *_, **__: True)
     monkeypatch.setattr(sections_module.st, "spinner", lambda *_: nullcontext())
     monkeypatch.setattr(sections_module.st, "error", errors.append)
+    monkeypatch.setattr(sections_module.st, "container", lambda *_, **__: nullcontext())
     monkeypatch.setattr(
         sections_module,
         "generate_brief",
-        MagicMock(side_effect=error),
+        MagicMock(
+            side_effect=AIBriefError(
+                "bad response from https://provider.example using secret-token"
+            )
+        ),
     )
 
-    render_ai_operations_brief(dashboard_state)
+    render_ai_operations_brief(dashboard_state, language=language)
 
     assert errors == [expected]

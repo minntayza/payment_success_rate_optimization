@@ -121,39 +121,40 @@ def render_ai_operations_brief(
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render analysis from aggregate facts in the selected language."""
-    st.subheader(translate("ai.title", language))
-    st.caption(translate("ai.description", language))
-    facts = build_brief_facts(state.display_frame, state.alerts)
-    fingerprint = facts_fingerprint({"language": language, "facts": facts})
+    with st.container(key="ai_brief_card"):
+        st.subheader(translate("ai.title", language))
+        st.caption(translate("ai.description", language))
+        facts = build_brief_facts(state.display_frame, state.alerts)
+        fingerprint = facts_fingerprint({"language": language, "facts": facts})
 
-    if st.session_state.get(AI_BRIEF_FINGERPRINT_KEY) != fingerprint:
-        st.session_state.pop(AI_BRIEF_TEXT_KEY, None)
-        st.session_state.pop(AI_BRIEF_FINGERPRINT_KEY, None)
+        if st.session_state.get(AI_BRIEF_FINGERPRINT_KEY) != fingerprint:
+            st.session_state.pop(AI_BRIEF_TEXT_KEY, None)
+            st.session_state.pop(AI_BRIEF_FINGERPRINT_KEY, None)
 
-    generate = st.button(
-        translate("ai.generate", language),
-        disabled=state.display_frame.empty,
-        type="primary",
-    )
-    if state.display_frame.empty:
-        st.info(translate("ai.requires_data", language))
+        generate = st.button(
+            translate("ai.generate", language),
+            disabled=state.display_frame.empty,
+            type="primary",
+        )
+        if state.display_frame.empty:
+            st.info(translate("ai.requires_data", language))
 
-    if generate:
-        try:
-            with st.spinner(translate("ai.generating", language)):
-                brief = generate_brief(facts, language=language)
-        except AIBriefError as exc:
-            st.error(str(exc))
-        else:
-            st.session_state[AI_BRIEF_TEXT_KEY] = brief
-            st.session_state[AI_BRIEF_FINGERPRINT_KEY] = fingerprint
+        if generate:
+            try:
+                with st.spinner(translate("ai.generating", language)):
+                    brief = generate_brief(facts, language=language)
+            except AIBriefError:
+                st.error(translate("ai.invalid_response", language))
+            else:
+                st.session_state[AI_BRIEF_TEXT_KEY] = brief
+                st.session_state[AI_BRIEF_FINGERPRINT_KEY] = fingerprint
 
-    brief_text = st.session_state.get(AI_BRIEF_TEXT_KEY)
-    if isinstance(brief_text, str):
-        with st.container(key="ai_brief_result"):
-            st.markdown(brief_text)
-        with st.expander(translate("ai.evidence", language)):
-            st.json(facts)
+        brief_text = st.session_state.get(AI_BRIEF_TEXT_KEY)
+        if isinstance(brief_text, str):
+            with st.container(key="ai_brief_result"):
+                st.markdown(brief_text)
+            with st.expander(translate("ai.evidence", language)):
+                st.json(facts)
 
 
 def render_kpis(
@@ -167,29 +168,42 @@ def render_kpis(
     kpis = (
         (
             "kpi_transactions",
+            "⇄",
             translate("kpi.transactions", language),
             f"{metrics['transaction_count']:,}",
         ),
         (
             "kpi_success",
+            "✓",
             translate("kpi.success_rate", language),
             f"{metrics['success_rate']:.1%}",
         ),
         (
             "kpi_failed",
+            "!",
             translate("kpi.failed", language),
             f"{metrics['failed_count']:,}",
         ),
         (
             "kpi_latency",
+            "◷",
             translate("kpi.average_latency", language),
             f"{metrics['average_latency_ms']:.1f} ms",
         ),
-        ("kpi_alerts", translate("kpi.active_alerts", language), active_alerts),
+        (
+            "kpi_alerts",
+            "⚑",
+            translate("kpi.active_alerts", language),
+            active_alerts,
+        ),
     )
-    for column, (key, label, value) in zip(st.columns(5), kpis, strict=True):
+    for column, (key, icon, label, value) in zip(st.columns(5), kpis, strict=True):
         with column.container(key=key):
-            column.metric(label, value)
+            st.markdown(
+                f'<span class="kpi-icon" aria-hidden="true">{icon}</span>',
+                unsafe_allow_html=True,
+            )
+            st.metric(label, value)
 
 
 def render_gateway_health(

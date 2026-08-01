@@ -101,7 +101,7 @@ def load_dashboard_transactions(
             return DatabaseResult(
                 fallback(),
                 "fallback",
-                "MongoDB Atlas is not configured; showing demo data.",
+                "database.fallback_not_configured",
             )
         ensure_indexes(resources.database)
         cursor = resources.database["transactions"].find(
@@ -113,6 +113,4 @@ def load_dashboard_transactions(
         return DatabaseResult(documents_to_frame(documents), "mongodb")
     except Exception as exc:
         LOGGER.warning("MongoDB read failed: %s", type(exc).__name__)
-        return DatabaseResult(
-            fallback(), "fallback", "MongoDB Atlas is unavailable; showing demo data."
-        )
+        return DatabaseResult(fallback(), "fallback", "database.fallback_unavailable")

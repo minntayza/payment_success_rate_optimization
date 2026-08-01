@@ -86,4 +86,15 @@ def test_load_uses_safe_fallback_on_failure(monkeypatch, sample_transactions) ->
     monkeypatch.setattr(mongodb, "ensure_indexes", lambda _: None)
     result = mongodb.load_dashboard_transactions(lambda: sample_transactions)
     assert result.source == "fallback"
-    assert "secret uri detail" not in (result.message or "")
+    assert result.message == "database.fallback_unavailable"
+
+
+def test_load_uses_localizable_status_when_database_is_not_configured(
+    monkeypatch, sample_transactions
+) -> None:
+    monkeypatch.setattr(mongodb, "create_resources_from_env", lambda: None)
+
+    result = mongodb.load_dashboard_transactions(lambda: sample_transactions)
+
+    assert result.source == "fallback"
+    assert result.message == "database.fallback_not_configured"
