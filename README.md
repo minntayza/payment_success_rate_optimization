@@ -25,6 +25,12 @@ be interpreted as measurements of real banks or payment gateways.
 - Hashed-password administrator login with create, edit, and soft-delete controls
 - Indexed MongoDB queries and transaction audit records
 
+## Dashboard previews
+
+| Desktop dashboard | Mobile dashboard |
+| --- | --- |
+| ![Playful Analyst desktop dashboard](docs/images/dashboard-playful-desktop.jpg) | ![Responsive Playful Analyst mobile dashboard](docs/images/dashboard-playful-mobile.jpg) |
+
 ## Requirements
 
 - Python 3.11 or newer
