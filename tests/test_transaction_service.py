@@ -77,6 +77,8 @@ def test_create_inserts_document_and_sanitized_audit(values) -> None:
     database = Database()
     create_transaction(database, values)
     assert database.transactions.document["transaction_id"] == "TX-1"
+    assert database.transactions.document["source_transaction_status"] == "Success"
+    assert database.transactions.document["simulation_version"] == "controlled-v1"
     event = database.audit.events[0]
     assert event["action"] == "INSERT"
     assert "pin_code" not in event["new_document"]

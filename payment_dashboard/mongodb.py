@@ -22,6 +22,8 @@ COLUMN_MAP = {
     "transaction_type": "Transaction Type",
     "transaction_timestamp": "Timestamp",
     "transaction_status": "Transaction Status",
+    "source_transaction_status": "Source Transaction Status",
+    "simulation_version": "Simulation Version",
     "fraud_flag": "Fraud Flag",
     "geolocation": "Geolocation (Latitude/Longitude)",
     "device_used": "Device Used",

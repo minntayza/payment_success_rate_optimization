@@ -9,6 +9,7 @@ import pandas as pd
 
 from payment_dashboard.config import DEFAULT_SEED, GATEWAYS
 from payment_dashboard.data_loader import load_transactions, validate_transactions
+from payment_dashboard.simulation import simulate_transactions
 
 log = logging.getLogger(__name__)
 
@@ -25,12 +26,15 @@ def assign_gateways(
 
 def prepare_file(input_path: Path, output_path: Path, seed: int) -> None:
     source = load_transactions(input_path, require_gateway=False)
-    prepared = assign_gateways(source, seed=seed)
+    prepared = simulate_transactions(source, seed=seed)
     validate_transactions(prepared, require_gateway=True)
     if len(prepared) != len(source):
         raise RuntimeError("Prepared row count differs from source")
-    if prepared["Transaction Status"].tolist() != source["Transaction Status"].tolist():
-        raise RuntimeError("Transaction outcomes changed during preparation")
+    if (
+        prepared["Source Transaction Status"].tolist()
+        != source["Transaction Status"].tolist()
+    ):
+        raise RuntimeError("Source transaction statuses changed during preparation")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     prepared.to_csv(output_path, index=False)
 

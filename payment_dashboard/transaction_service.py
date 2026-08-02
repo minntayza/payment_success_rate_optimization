@@ -9,6 +9,7 @@ import pandas as pd
 
 from payment_dashboard.config import GATEWAYS, STATUSES
 from payment_dashboard.mongodb import COLUMN_MAP
+from payment_dashboard.simulation import SIMULATION_VERSION
 
 
 class TransactionValidationError(ValueError):
@@ -21,11 +22,19 @@ class TransactionMutationError(RuntimeError):
 
 TRANSACTION_TYPES = frozenset({"Transfer", "Deposit", "Withdrawal"})
 DEVICES = frozenset({"Mobile", "Desktop"})
+SIMULATION_METADATA_FIELDS = {
+    "Source Transaction Status",
+    "Simulation Version",
+}
 
 
 def validate_transaction(values: dict[str, object]) -> dict[str, object]:
     """Validate UI-format values and return a database-format payload."""
-    missing = [name for name in COLUMN_MAP.values() if name not in values]
+    missing = [
+        name
+        for name in COLUMN_MAP.values()
+        if name not in SIMULATION_METADATA_FIELDS and name not in values
+    ]
     if missing:
         raise TransactionValidationError(
             f"Missing required fields: {', '.join(missing)}"
@@ -110,6 +119,8 @@ def create_transaction(
     now = datetime.now(UTC)
     payload.update(
         {
+            "source_transaction_status": payload["transaction_status"],
+            "simulation_version": SIMULATION_VERSION,
             "is_deleted": False,
             "created_at": now,
             "updated_at": now,

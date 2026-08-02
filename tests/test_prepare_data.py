@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from payment_dashboard.prepare_data import assign_gateways, prepare_file
+from payment_dashboard.simulation import SIMULATION_VERSION
 
 
 def test_assignment_is_reproducible(sample_transactions):
@@ -60,11 +61,13 @@ def test_prepare_file_writes_valid_enriched_copy(sample_transactions, tmp_path):
     original_statuses = sample_transactions.set_index("Transaction ID")[
         "Transaction Status"
     ].sort_index()
-    written_statuses = written.set_index("Transaction ID")[
-        "Transaction Status"
+    written_source_statuses = written.set_index("Transaction ID")[
+        "Source Transaction Status"
     ].sort_index()
     pd.testing.assert_series_equal(
-        written_statuses,
+        written_source_statuses,
         original_statuses,
         check_names=False,
     )
+    assert set(written["Transaction Status"]) <= {"Success", "Failed"}
+    assert written["Simulation Version"].eq(SIMULATION_VERSION).all()

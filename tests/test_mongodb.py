@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from payment_dashboard import mongodb
+from payment_dashboard.simulation import SIMULATION_VERSION
 
 
 def _document() -> dict[str, object]:
@@ -16,6 +17,8 @@ def _document() -> dict[str, object]:
         "transaction_type": "Transfer",
         "transaction_timestamp": "2025-01-17T10:00:00+00:00",
         "transaction_status": "Success",
+        "source_transaction_status": "Success",
+        "simulation_version": SIMULATION_VERSION,
         "fraud_flag": False,
         "geolocation": "16.8,96.1",
         "device_used": "Mobile",
@@ -32,6 +35,8 @@ def test_documents_to_frame_preserves_dashboard_contract() -> None:
     frame = mongodb.documents_to_frame([_document()])
     assert frame.loc[0, "Transaction ID"] == "TX-1"
     assert frame.loc[0, "PIN Code"] == "0123"
+    assert frame.loc[0, "Source Transaction Status"] == "Success"
+    assert frame.loc[0, "Simulation Version"] == SIMULATION_VERSION
     assert pd.api.types.is_datetime64_any_dtype(frame["Timestamp"])
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from payment_dashboard.load_mongodb import frame_to_documents, import_transactions
+from payment_dashboard.simulation import simulate_transactions
 
 
 class Collection:
@@ -19,17 +20,19 @@ class Database(dict):
 
 
 def test_frame_to_documents_uses_native_values(sample_transactions) -> None:
-    frame = sample_transactions.iloc[:1].assign(**{"Bank Gateway": "Gateway A"})
+    frame = simulate_transactions(sample_transactions.iloc[:1], seed=42)
     document = frame_to_documents(frame)[0]
     assert document["transaction_id"] == "TX1"
     assert document["transaction_timestamp"].tzinfo is not None
     assert isinstance(document["fraud_flag"], bool)
+    assert document["source_transaction_status"] == "Success"
+    assert document["simulation_version"]
 
 
 def test_import_uses_batched_upserts(
     monkeypatch, tmp_path, sample_transactions
 ) -> None:
-    frame = sample_transactions.iloc[:3].assign(**{"Bank Gateway": "Gateway A"})
+    frame = simulate_transactions(sample_transactions.iloc[:3], seed=42)
     path = tmp_path / "prepared.csv"
     frame.to_csv(path, index=False)
     database = Database()
