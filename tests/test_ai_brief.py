@@ -179,11 +179,56 @@ def test_request_contains_only_prompted_aggregate_facts(
     assert isinstance(payload, dict)
     assert captured["url"] == "https://provider/v1/messages"
     assert payload["model"] == "test-model"
+    assert payload["max_tokens"] == 700
     assert payload["messages"] == [
         {"role": "user", "content": ai_brief.build_brief_prompt(facts)}
     ]
     assert captured["timeout"] == 4.5
     assert "secret" not in json.dumps(payload)
+
+
+def test_request_forwards_a_validated_smaller_token_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    """Opt-in contracts can bound provider output below the production default."""
+    captured: dict[str, object] = {}
+
+    def provider(request, **_kwargs):
+        captured.update(json.loads(request.data))
+        return _provider_response(_valid_content())
+
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="https://provider",
+        api_key="secret",
+        max_tokens=128,
+    )
+
+    assert result.origin == "ai"
+    assert captured["max_tokens"] == 128
+
+
+@pytest.mark.parametrize("max_tokens", [0, 701, True, 1.5])
+def test_invalid_token_cap_returns_local_without_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+    max_tokens: object,
+) -> None:
+    """Non-integer, boolean, and out-of-range provider caps are refused."""
+    provider = Mock(side_effect=AssertionError("invalid cap reached provider"))
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="https://provider",
+        api_key="secret",
+        max_tokens=max_tokens,  # type: ignore[arg-type]
+    )
+
+    assert result.origin == "local"
 
 
 def test_invalid_base_url_returns_local_fallback(

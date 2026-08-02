@@ -7,9 +7,13 @@ import sys
 from collections.abc import Callable, Sequence
 from typing import Any
 
-READY_SELECTOR = "[data-testid='stAppViewContainer']"
 SOURCE_BADGE_SELECTOR = ".source-status"
-EXCEPTION_SELECTOR = "[data-testid='stException'], .stException"
+METRIC_LABEL_SELECTOR = "[data-testid='stMetricLabel']"
+ERROR_DETAIL_SELECTOR = (
+    "[data-testid='stException'], "
+    "[data-testid='stExceptionDetails'], "
+    "[data-testid='stNotificationContentError']"
+)
 REQUIRED_KPI_LABELS = ("Transactions", "Success rate")
 TIMEOUT_MS = 30_000
 
@@ -27,25 +31,47 @@ def run_dashboard_smoke(
         browser = playwright.chromium.launch(headless=True)
         try:
             page = browser.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=TIMEOUT_MS)
-            page.wait_for_selector(READY_SELECTOR, state="visible", timeout=TIMEOUT_MS)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=TIMEOUT_MS)
+            if response is None:
+                raise SmokeCheckError("Dashboard load failed without an HTTP response")
+            if not response.ok:
+                raise SmokeCheckError(
+                    f"Dashboard load failed with HTTP status {response.status}"
+                )
 
             source_badge = page.locator(SOURCE_BADGE_SELECTOR)
+            try:
+                source_badge.wait_for(state="visible", timeout=TIMEOUT_MS)
+            except Exception as exc:
+                raise SmokeCheckError("Dashboard source badge is not visible") from exc
             if source_badge.count() == 0 or not source_badge.first.is_visible():
                 raise SmokeCheckError("Dashboard source badge is not visible")
 
-            visible_text = page.locator("body").inner_text()
-            missing_labels = [
-                label for label in REQUIRED_KPI_LABELS if label not in visible_text
-            ]
-            if missing_labels:
-                raise SmokeCheckError(
-                    "Dashboard is missing KPI labels: " + ", ".join(missing_labels)
+            metric_labels = page.locator(METRIC_LABEL_SELECTOR)
+            for label in REQUIRED_KPI_LABELS:
+                matching = metric_labels.filter(has_text=label)
+                try:
+                    matching.wait_for(state="visible", timeout=TIMEOUT_MS)
+                except Exception as exc:
+                    raise SmokeCheckError(
+                        f"Dashboard is missing visible KPI label: {label}"
+                    ) from exc
+                exact_visible_match = any(
+                    matching.nth(index).is_visible()
+                    and matching.nth(index).inner_text().strip() == label
+                    for index in range(matching.count())
                 )
+                if not exact_visible_match:
+                    raise SmokeCheckError(
+                        f"Dashboard is missing visible KPI label: {label}"
+                    )
 
-            exceptions = page.locator(EXCEPTION_SELECTOR)
-            if exceptions.count() and exceptions.first.is_visible():
-                raise SmokeCheckError("Dashboard rendered a visible exception")
+            error_details = page.locator(ERROR_DETAIL_SELECTOR)
+            if any(
+                error_details.nth(index).is_visible()
+                for index in range(error_details.count())
+            ):
+                raise SmokeCheckError("Dashboard rendered a visible exception or error")
         finally:
             browser.close()
 

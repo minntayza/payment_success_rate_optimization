@@ -193,6 +193,19 @@ class Database(dict[str, SemanticCollection]):
         super().__init__(transactions=SemanticCollection(documents))
 
 
+def test_repository_uses_injected_collection_name() -> None:
+    """A live contract can query an isolated collection instead of production."""
+    isolated = SemanticCollection([])
+    database = {"dashboard_contract_test": isolated}
+
+    snapshot = mongodb.MongoDashboardRepository(
+        database, collection_name="dashboard_contract_test"
+    ).fetch(DashboardFilters(), PageRequest(number=1, size=1))
+
+    assert snapshot.source is DataSource.LIVE
+    assert len(isolated.aggregate_calls) == 2
+
+
 def _operators(value: object) -> set[str]:
     if isinstance(value, dict):
         return {

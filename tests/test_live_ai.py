@@ -24,6 +24,11 @@ MINIMAL_FACTS: dict[str, object] = {
 @pytest.mark.skipif(os.getenv("RUN_AI_TESTS") != "1", reason="live AI disabled")
 def test_live_ai_contract() -> None:
     """Configured provider returns a validated AI-origin brief within one attempt."""
-    result = generate_brief_result(MINIMAL_FACTS, timeout=10, attempts=1)
+    result = generate_brief_result(
+        MINIMAL_FACTS,
+        timeout=10,
+        attempts=1,
+        max_tokens=128,
+    )
 
     assert result.origin == "ai"

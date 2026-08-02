@@ -148,6 +148,7 @@ class MongoDashboardRepository:
     """Live dashboard repository backed by bounded MongoDB aggregations."""
 
     database: Any
+    collection_name: str = "transactions"
 
     def fetch(
         self,
@@ -155,7 +156,7 @@ class MongoDashboardRepository:
         page: PageRequest,
     ) -> DashboardSnapshot:
         """Return aggregate dashboard data plus one bounded transaction page."""
-        collection = self.database["transactions"]
+        collection = self.database[self.collection_name]
         display_result = _aggregate_one(
             collection,
             _display_dashboard_pipeline(filters, page),

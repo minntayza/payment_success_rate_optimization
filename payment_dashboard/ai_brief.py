@@ -30,6 +30,7 @@ from payment_dashboard.models import DashboardSnapshot
 
 DEFAULT_ANTHROPIC_MODEL = "mimo-2.5-pro"
 ANTHROPIC_VERSION = "2023-06-01"
+DEFAULT_MAX_TOKENS = 700
 MAX_SUMMARY_LENGTH = 2_000
 MAX_LIST_ITEMS = 8
 MAX_ITEM_LENGTH = 600
@@ -330,10 +331,13 @@ def generate_brief_result(
     model: str | None = None,
     timeout: float = 30.0,
     attempts: int = 2,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     sleep: Callable[[float], None] | None = None,
 ) -> BriefResult:
     """Return a validated provider brief or deterministic local content."""
     local_result = BriefResult(build_local_brief(facts, language), "local")
+    if type(max_tokens) is not int or not 1 <= max_tokens <= DEFAULT_MAX_TOKENS:
+        return local_result
     try:
         resolved_url, resolved_key, resolved_model = _provider_settings(
             base_url, api_key, model
@@ -350,6 +354,7 @@ def generate_brief_result(
             resolved_model,
             facts,
             language,
+            max_tokens,
         )
     except (AttributeError, OSError, TypeError, UnicodeError, ValueError):
         return local_result
@@ -418,10 +423,11 @@ def _provider_request(
     model: str,
     facts: Mapping[str, object],
     language: Language,
+    max_tokens: int,
 ) -> urllib.request.Request:
     payload = {
         "model": model,
-        "max_tokens": 700,
+        "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": build_brief_prompt(facts, language)}],
     }
     return urllib.request.Request(
