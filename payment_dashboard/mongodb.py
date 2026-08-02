@@ -6,11 +6,23 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, time, timedelta
 from typing import Any, Literal
 
 import pandas as pd
+from pymongo.errors import (
+    ConfigurationError,
+    ConnectionFailure,
+    ExecutionTimeout,
+    NetworkTimeout,
+    OperationFailure,
+    ServerSelectionTimeoutError,
+)
 
+from payment_dashboard.analytics import add_latency_band
+from payment_dashboard.dashboard_repository import DashboardFilters, PageRequest
 from payment_dashboard.data_loader import validate_transactions
+from payment_dashboard.models import DashboardSnapshot, DataSource
 
 LOGGER = logging.getLogger(__name__)
 LEGACY_SIMULATION_VERSION = "legacy-v0"
@@ -74,9 +86,423 @@ def ensure_indexes(database: Any) -> None:
     """Create the indexes required by imports and dashboard queries."""
     collection = database["transactions"]
     collection.create_index([("transaction_id", 1)], unique=True)
-    collection.create_index([("transaction_timestamp", 1)])
-    collection.create_index([("bank_gateway", 1), ("transaction_status", 1)])
-    collection.create_index([("is_deleted", 1), ("transaction_timestamp", 1)])
+    collection.create_index([("is_deleted", 1), ("transaction_timestamp", -1)])
+    collection.create_index(
+        [
+            ("is_deleted", 1),
+            ("bank_gateway", 1),
+            ("transaction_status", 1),
+            ("transaction_timestamp", -1),
+        ]
+    )
+    collection.create_index(
+        [
+            ("is_deleted", 1),
+            ("transaction_type", 1),
+            ("device_used", 1),
+            ("transaction_timestamp", -1),
+        ]
+    )
+
+
+def classify_mongodb_error(exc: Exception) -> str:
+    """Map a MongoDB exception to a fixed diagnostic category."""
+    if isinstance(exc, ConfigurationError):
+        return "configuration"
+    if isinstance(
+        exc,
+        (ExecutionTimeout, NetworkTimeout, ServerSelectionTimeoutError),
+    ):
+        return "timeout"
+    if isinstance(exc, ConnectionFailure):
+        return "connection"
+    if isinstance(exc, OperationFailure):
+        return "query"
+    return "unexpected"
+
+
+@dataclass(frozen=True, slots=True)
+class MongoDashboardRepository:
+    """Live dashboard repository backed by bounded MongoDB aggregations."""
+
+    database: Any
+
+    def fetch(
+        self,
+        filters: DashboardFilters,
+        page: PageRequest,
+    ) -> DashboardSnapshot:
+        """Return aggregate dashboard data plus one bounded transaction page."""
+        collection = self.database["transactions"]
+        result = next(
+            iter(collection.aggregate(_dashboard_pipeline(filters, page))), {}
+        )
+        transactions = _transactions_frame(result.get("transactions", []))
+        return DashboardSnapshot(
+            metrics=_metrics(result.get("metrics", [])),
+            gateway_summary=_records_frame(
+                result.get("gateway_summary", []),
+                [
+                    "Bank Gateway",
+                    "transaction_count",
+                    "success_rate",
+                    "average_latency_ms",
+                ],
+            ),
+            trend=_trend_frame(result.get("trend", [])),
+            failure_summary=_records_frame(
+                result.get("failure_summary", []),
+                ["Latency Band", "failed_count"],
+            ),
+            alerts=_records_frame(
+                result.get("alerts", []),
+                [
+                    "Bank Gateway",
+                    "baseline_rate",
+                    "rolling_rate",
+                    "drop",
+                    "has_sufficient_history",
+                    "is_alert",
+                ],
+            ),
+            transactions=transactions,
+            total_transactions=_total_count(result.get("total_count", [])),
+            source=DataSource.LIVE,
+            simulation_version=_metadata_version(result.get("metadata", [])),
+            diagnostic=None,
+        )
+
+
+def _dashboard_pipeline(
+    filters: DashboardFilters,
+    page: PageRequest,
+) -> list[dict[str, object]]:
+    """Build the single bounded aggregate query used for a dashboard snapshot."""
+    return [
+        {"$match": _match(filters)},
+        {
+            "$facet": {
+                "metrics": _metrics_pipeline(),
+                "gateway_summary": _gateway_pipeline(),
+                "trend": _trend_pipeline(),
+                "failure_summary": _failure_pipeline(),
+                "alerts": _alerts_pipeline(),
+                "transactions": [
+                    {
+                        "$sort": {
+                            "transaction_timestamp": -1,
+                            "transaction_id": 1,
+                        }
+                    },
+                    {"$skip": (page.number - 1) * page.size},
+                    {"$limit": page.size},
+                    {"$project": {"_id": 0}},
+                ],
+                "total_count": [{"$count": "count"}],
+                "metadata": [
+                    {"$match": {"simulation_version": {"$type": "string"}}},
+                    {"$limit": 1},
+                    {"$project": {"_id": 0, "simulation_version": 1}},
+                ],
+            }
+        },
+    ]
+
+
+def _match(filters: DashboardFilters) -> dict[str, object]:
+    match: dict[str, object] = {"is_deleted": {"$ne": True}}
+    for field, values in (
+        ("bank_gateway", filters.gateways),
+        ("transaction_type", filters.transaction_types),
+        ("device_used", filters.devices),
+        ("transaction_status", filters.statuses),
+    ):
+        if values:
+            if not all(isinstance(value, str) for value in values):
+                raise ValueError(f"{field} filters must contain strings")
+            match[field] = {"$in": list(values)}
+    timestamp: dict[str, datetime] = {}
+    if filters.start is not None:
+        timestamp["$gte"] = datetime.combine(filters.start, time.min)
+    if filters.end is not None:
+        timestamp["$lt"] = datetime.combine(filters.end + timedelta(days=1), time.min)
+    if timestamp:
+        match["transaction_timestamp"] = timestamp
+    return match
+
+
+def _metrics_pipeline() -> list[dict[str, object]]:
+    return [
+        {
+            "$group": {
+                "_id": None,
+                "transaction_count": {"$sum": 1},
+                "success_count": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$transaction_status", "Success"]}, 1, 0]
+                    }
+                },
+                "failed_count": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$transaction_status", "Failed"]}, 1, 0]
+                    }
+                },
+                "average_latency_ms": {"$avg": "$latency_ms"},
+                "p95_latency_ms": {
+                    "$percentile": {
+                        "input": "$latency_ms",
+                        "p": [0.95],
+                        "method": "approximate",
+                    }
+                },
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "transaction_count": 1,
+                "success_rate": {
+                    "$cond": [
+                        {"$gt": ["$transaction_count", 0]},
+                        {"$divide": ["$success_count", "$transaction_count"]},
+                        0.0,
+                    ]
+                },
+                "failed_count": 1,
+                "average_latency_ms": {"$ifNull": ["$average_latency_ms", 0.0]},
+                "p95_latency_ms": {
+                    "$ifNull": [
+                        {"$arrayElemAt": ["$p95_latency_ms", 0]},
+                        0.0,
+                    ]
+                },
+            }
+        },
+    ]
+
+
+def _gateway_pipeline() -> list[dict[str, object]]:
+    return [
+        {
+            "$group": {
+                "_id": "$bank_gateway",
+                "transaction_count": {"$sum": 1},
+                "success_count": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$transaction_status", "Success"]}, 1, 0]
+                    }
+                },
+                "average_latency_ms": {"$avg": "$latency_ms"},
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "Bank Gateway": "$_id",
+                "transaction_count": 1,
+                "success_rate": {"$divide": ["$success_count", "$transaction_count"]},
+                "average_latency_ms": 1,
+            }
+        },
+        {"$sort": {"Bank Gateway": 1}},
+    ]
+
+
+def _trend_pipeline() -> list[dict[str, object]]:
+    return [
+        {
+            "$group": {
+                "_id": {
+                    "$dateTrunc": {
+                        "date": "$transaction_timestamp",
+                        "unit": "minute",
+                        "binSize": 15,
+                    }
+                },
+                "transaction_count": {"$sum": 1},
+                "success_count": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$transaction_status", "Success"]}, 1, 0]
+                    }
+                },
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "Timestamp": "$_id",
+                "success_rate": {"$divide": ["$success_count", "$transaction_count"]},
+                "transaction_count": 1,
+            }
+        },
+        {"$sort": {"Timestamp": 1}},
+    ]
+
+
+def _failure_pipeline() -> list[dict[str, object]]:
+    return [
+        {"$match": {"transaction_status": "Failed"}},
+        {
+            "$project": {
+                "latency_band": {
+                    "$switch": {
+                        "branches": [
+                            {"case": {"$lte": ["$latency_ms", 5]}, "then": "0-5 ms"},
+                            {
+                                "case": {"$lte": ["$latency_ms", 10]},
+                                "then": "6-10 ms",
+                            },
+                            {
+                                "case": {"$lte": ["$latency_ms", 15]},
+                                "then": "11-15 ms",
+                            },
+                        ],
+                        "default": "16+ ms",
+                    }
+                }
+            }
+        },
+        {"$group": {"_id": "$latency_band", "failed_count": {"$sum": 1}}},
+        {"$project": {"_id": 0, "Latency Band": "$_id", "failed_count": 1}},
+        {"$sort": {"failed_count": -1, "Latency Band": 1}},
+    ]
+
+
+def _alerts_pipeline() -> list[dict[str, object]]:
+    return [
+        {
+            "$setWindowFields": {
+                "partitionBy": "$bank_gateway",
+                "sortBy": {"transaction_timestamp": -1, "transaction_id": 1},
+                "output": {"recency_rank": {"$documentNumber": {}}},
+            }
+        },
+        {
+            "$group": {
+                "_id": "$bank_gateway",
+                "transaction_count": {"$sum": 1},
+                "success_count": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$transaction_status", "Success"]}, 1, 0]
+                    }
+                },
+                "rolling_count": {
+                    "$sum": {"$cond": [{"$lte": ["$recency_rank", 50]}, 1, 0]}
+                },
+                "rolling_success_count": {
+                    "$sum": {
+                        "$cond": [
+                            {
+                                "$and": [
+                                    {"$lte": ["$recency_rank", 50]},
+                                    {"$eq": ["$transaction_status", "Success"]},
+                                ]
+                            },
+                            1,
+                            0,
+                        ]
+                    }
+                },
+            }
+        },
+        {
+            "$set": {
+                "baseline_rate": {"$divide": ["$success_count", "$transaction_count"]},
+                "has_sufficient_history": {"$gte": ["$rolling_count", 50]},
+            }
+        },
+        {
+            "$set": {
+                "rolling_rate": {
+                    "$cond": [
+                        "$has_sufficient_history",
+                        {"$divide": ["$rolling_success_count", "$rolling_count"]},
+                        None,
+                    ]
+                }
+            }
+        },
+        {
+            "$set": {
+                "drop": {
+                    "$cond": [
+                        "$has_sufficient_history",
+                        {"$subtract": ["$baseline_rate", "$rolling_rate"]},
+                        None,
+                    ]
+                }
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "Bank Gateway": "$_id",
+                "baseline_rate": 1,
+                "rolling_rate": 1,
+                "drop": 1,
+                "has_sufficient_history": 1,
+                "is_alert": {
+                    "$and": ["$has_sufficient_history", {"$gte": ["$drop", 0.1]}]
+                },
+            }
+        },
+        {"$sort": {"Bank Gateway": 1}},
+    ]
+
+
+def _metrics(records: object) -> dict[str, int | float]:
+    defaults: dict[str, int | float] = {
+        "transaction_count": 0,
+        "success_rate": 0.0,
+        "failed_count": 0,
+        "average_latency_ms": 0.0,
+        "p95_latency_ms": 0.0,
+    }
+    if isinstance(records, list) and records and isinstance(records[0], dict):
+        defaults.update(
+            {key: value for key, value in records[0].items() if key in defaults}
+        )
+    return defaults
+
+
+def _records_frame(records: object, columns: list[str]) -> pd.DataFrame:
+    if not isinstance(records, list):
+        return pd.DataFrame(columns=columns)
+    return pd.DataFrame.from_records(records, columns=columns)
+
+
+def _trend_frame(records: object) -> pd.DataFrame:
+    frame = _records_frame(
+        records,
+        ["Timestamp", "success_rate", "transaction_count"],
+    )
+    frame["Timestamp"] = pd.to_datetime(frame["Timestamp"])
+    return frame
+
+
+def _transactions_frame(records: object) -> pd.DataFrame:
+    if not isinstance(records, list) or not records:
+        frame = pd.DataFrame(
+            {column: pd.Series(dtype="object") for column in COLUMN_MAP.values()}
+        )
+        frame["Timestamp"] = pd.Series(dtype="datetime64[ns]")
+        frame["Latency (ms)"] = pd.Series(dtype="float64")
+        return add_latency_band(frame)
+    return add_latency_band(documents_to_frame(records))
+
+
+def _total_count(records: object) -> int:
+    if isinstance(records, list) and records and isinstance(records[0], dict):
+        return int(records[0].get("count", 0))
+    return 0
+
+
+def _metadata_version(records: object) -> str:
+    if isinstance(records, list) and records and isinstance(records[0], dict):
+        value = records[0].get("simulation_version")
+        if value is not None:
+            return str(value)
+    return LEGACY_SIMULATION_VERSION
 
 
 def documents_to_frame(documents: list[dict[str, object]]) -> pd.DataFrame:
@@ -109,7 +535,7 @@ def documents_to_frame(documents: list[dict[str, object]]) -> pd.DataFrame:
 def load_dashboard_transactions(
     fallback: Callable[[], pd.DataFrame],
 ) -> DatabaseResult:
-    """Load active Atlas documents, falling back safely when unavailable."""
+    """Compatibility loader backed by one bounded live transaction page."""
     try:
         resources = create_resources_from_env()
         if resources is None:
@@ -119,13 +545,18 @@ def load_dashboard_transactions(
                 "database.fallback_not_configured",
             )
         ensure_indexes(resources.database)
-        cursor = resources.database["transactions"].find(
-            {"is_deleted": {"$ne": True}}, {"_id": False}
+        snapshot = MongoDashboardRepository(resources.database).fetch(
+            DashboardFilters(),
+            PageRequest(number=1, size=100),
         )
-        documents = list(cursor.sort("transaction_timestamp", 1))
-        if not documents:
-            raise ValueError("No active MongoDB transactions")
-        return DatabaseResult(documents_to_frame(documents), "mongodb")
-    except Exception as exc:
+        return DatabaseResult(snapshot.transactions, "mongodb")
+    except (
+        ConfigurationError,
+        ConnectionFailure,
+        ExecutionTimeout,
+        NetworkTimeout,
+        OperationFailure,
+        ServerSelectionTimeoutError,
+    ) as exc:
         LOGGER.warning("MongoDB read failed: %s", type(exc).__name__)
         return DatabaseResult(fallback(), "fallback", "database.fallback_unavailable")

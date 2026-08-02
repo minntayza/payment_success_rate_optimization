@@ -3,6 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
+from pymongo.errors import OperationFailure
 
 from payment_dashboard import mongodb
 from payment_dashboard.simulation import SIMULATION_VERSION
@@ -28,6 +30,19 @@ def _document() -> dict[str, object]:
         "pin_code": "0123",
         "bank_gateway": "Gateway A",
         "is_deleted": False,
+    }
+
+
+def _aggregate_result(documents: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "metrics": [],
+        "gateway_summary": [],
+        "trend": [],
+        "failure_summary": [],
+        "alerts": [],
+        "transactions": documents,
+        "total_count": [{"count": len(documents)}],
+        "metadata": [{"simulation_version": SIMULATION_VERSION}],
     }
 
 
@@ -72,35 +87,39 @@ def test_ensure_indexes_creates_required_indexes() -> None:
     mongodb.ensure_indexes({"transactions": collection})
     assert any(options.get("unique") for _, options in calls)
     assert any(
-        keys == [("is_deleted", 1), ("transaction_timestamp", 1)] for keys, _ in calls
+        keys == [("is_deleted", 1), ("transaction_timestamp", -1)] for keys, _ in calls
     )
 
 
 def test_load_queries_active_documents(monkeypatch) -> None:
-    class Cursor(list):
-        def sort(self, key, direction):
-            assert (key, direction) == ("transaction_timestamp", 1)
-            return self
-
     class Collection:
-        def find(self, query, projection):
-            assert query == {"is_deleted": {"$ne": True}}
-            assert projection == {"_id": False}
-            return Cursor([_document()])
+        find_called = False
 
-    database = {"transactions": Collection()}
+        def aggregate(self, pipeline):
+            assert pipeline[0] == {"$match": {"is_deleted": {"$ne": True}}}
+            facet = pipeline[1]["$facet"]
+            assert {"$limit": 100} in facet["transactions"]
+            return [_aggregate_result([_document()])]
+
+        def find(self, *_):
+            self.find_called = True
+            raise AssertionError("legacy loader must use bounded aggregation")
+
+    collection = Collection()
+    database = {"transactions": collection}
     resources = mongodb.MongoResources(SimpleNamespace(), database)
     monkeypatch.setattr(mongodb, "create_resources_from_env", lambda: resources)
     monkeypatch.setattr(mongodb, "ensure_indexes", lambda _: None)
     result = mongodb.load_dashboard_transactions(lambda: pd.DataFrame())
     assert result.source == "mongodb"
     assert result.frame["Transaction ID"].tolist() == ["TX-1"]
+    assert collection.find_called is False
 
 
 def test_load_uses_safe_fallback_on_failure(monkeypatch, sample_transactions) -> None:
     class Collection:
-        def find(self, *_):
-            raise RuntimeError("secret uri detail")
+        def aggregate(self, *_):
+            raise OperationFailure("secret uri detail")
 
     resources = mongodb.MongoResources(
         SimpleNamespace(), {"transactions": Collection()}
@@ -110,6 +129,23 @@ def test_load_uses_safe_fallback_on_failure(monkeypatch, sample_transactions) ->
     result = mongodb.load_dashboard_transactions(lambda: sample_transactions)
     assert result.source == "fallback"
     assert result.message == "database.fallback_unavailable"
+
+
+def test_load_does_not_hide_unexpected_programming_errors(
+    monkeypatch, sample_transactions
+) -> None:
+    class Collection:
+        def aggregate(self, *_):
+            raise RuntimeError("programming defect")
+
+    resources = mongodb.MongoResources(
+        SimpleNamespace(), {"transactions": Collection()}
+    )
+    monkeypatch.setattr(mongodb, "create_resources_from_env", lambda: resources)
+    monkeypatch.setattr(mongodb, "ensure_indexes", lambda _: None)
+
+    with pytest.raises(RuntimeError, match="programming defect"):
+        mongodb.load_dashboard_transactions(lambda: sample_transactions)
 
 
 def test_load_uses_localizable_status_when_database_is_not_configured(
