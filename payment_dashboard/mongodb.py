@@ -156,9 +156,12 @@ class MongoDashboardRepository:
     ) -> DashboardSnapshot:
         """Return aggregate dashboard data plus one bounded transaction page."""
         collection = self.database["transactions"]
-        result = next(
-            iter(collection.aggregate(_dashboard_pipeline(filters, page))), {}
+        display_result = _aggregate_one(
+            collection,
+            _display_dashboard_pipeline(filters, page),
         )
+        history_result = _aggregate_one(collection, _history_pipeline())
+        result = {**display_result, **history_result}
         transactions = _transactions_frame(result.get("transactions", []))
         return DashboardSnapshot(
             metrics=_metrics(result.get("metrics", [])),
@@ -187,56 +190,60 @@ class MongoDashboardRepository:
         )
 
 
-def _dashboard_pipeline(
+def _aggregate_one(
+    collection: Any,
+    pipeline: list[dict[str, object]],
+) -> dict[str, object]:
+    return next(iter(collection.aggregate(pipeline)), {})
+
+
+def _display_dashboard_pipeline(
     filters: DashboardFilters,
     page: PageRequest,
 ) -> list[dict[str, object]]:
-    """Build the single bounded aggregate query used for a dashboard snapshot."""
-    display_match = _display_match(filters)
+    """Build the indexable filtered aggregation for display data."""
+    match = {"is_deleted": {"$ne": True}, **_display_match(filters)}
+    return [
+        {"$match": match},
+        {
+            "$facet": {
+                "metrics": _metrics_pipeline(),
+                "gateway_summary": _gateway_pipeline(),
+                "trend": _trend_pipeline(),
+                "failure_summary": _failure_pipeline(),
+                "transactions": [
+                    {
+                        "$sort": {
+                            "transaction_timestamp": -1,
+                            "transaction_id": 1,
+                        }
+                    },
+                    {"$skip": (page.number - 1) * page.size},
+                    {"$limit": page.size},
+                    {"$project": {"_id": 0}},
+                ],
+                "total_count": [{"$count": "count"}],
+            }
+        },
+    ]
+
+
+def _history_pipeline() -> list[dict[str, object]]:
+    """Build the active-only aggregation for alerts and source metadata."""
     return [
         {"$match": {"is_deleted": {"$ne": True}}},
         {
             "$facet": {
-                "metrics": _display_pipeline(display_match, _metrics_pipeline()),
-                "gateway_summary": _display_pipeline(
-                    display_match, _gateway_pipeline()
-                ),
-                "trend": _display_pipeline(display_match, _trend_pipeline()),
-                "failure_summary": _display_pipeline(
-                    display_match, _failure_pipeline()
-                ),
                 "alerts": _alerts_pipeline(),
-                "transactions": _display_pipeline(
-                    display_match,
-                    [
-                        {
-                            "$sort": {
-                                "transaction_timestamp": -1,
-                                "transaction_id": 1,
-                            }
-                        },
-                        {"$skip": (page.number - 1) * page.size},
-                        {"$limit": page.size},
-                        {"$project": {"_id": 0}},
-                    ],
-                ),
-                "total_count": _display_pipeline(display_match, [{"$count": "count"}]),
                 "metadata": _metadata_pipeline(),
             }
         },
     ]
 
 
-def _display_pipeline(
-    match: dict[str, object],
-    stages: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    if not match:
-        return stages
-    return [{"$match": match}, *stages]
-
-
-def _display_match(filters: DashboardFilters) -> dict[str, object]:
+def _display_match(
+    filters: DashboardFilters,
+) -> dict[str, object]:
     match: dict[str, object] = {}
     for field, values in (
         ("bank_gateway", filters.gateways),

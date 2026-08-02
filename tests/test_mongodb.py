@@ -95,10 +95,15 @@ def test_load_queries_active_documents(monkeypatch) -> None:
     class Collection:
         find_called = False
 
+        def __init__(self):
+            self.aggregate_calls = []
+
         def aggregate(self, pipeline):
+            self.aggregate_calls.append(pipeline)
             assert pipeline[0] == {"$match": {"is_deleted": {"$ne": True}}}
             facet = pipeline[1]["$facet"]
-            assert {"$limit": 100} in facet["transactions"]
+            if "transactions" in facet:
+                assert {"$limit": 100} in facet["transactions"]
             return [_aggregate_result([_document()])]
 
         def find(self, *_):
@@ -114,6 +119,7 @@ def test_load_queries_active_documents(monkeypatch) -> None:
     assert result.source == "mongodb"
     assert result.frame["Transaction ID"].tolist() == ["TX-1"]
     assert collection.find_called is False
+    assert len(collection.aggregate_calls) == 2
 
 
 def test_load_uses_safe_fallback_on_failure(monkeypatch, sample_transactions) -> None:

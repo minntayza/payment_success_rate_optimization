@@ -139,43 +139,46 @@ class SemanticCollection:
 
     def aggregate(self, pipeline: list[dict[str, Any]]) -> list[dict[str, Any]]:
         self.aggregate_calls.append(pipeline)
-        active = [
+        matched = [
             item for item in self.documents if _matches(item, pipeline[0]["$match"])
         ]
         facet = pipeline[1]["$facet"]
-        display_match = _branch_match(facet["transactions"])
-        display = [item for item in active if _matches(item, display_match)]
-        display_frame = _frame(display)
-
-        page_branch = facet["transactions"]
-        display.sort(
-            key=lambda item: (
-                -item["transaction_timestamp"].timestamp(),
-                item["transaction_id"],
+        result: dict[str, object] = {}
+        if "transactions" in facet:
+            display_match = _branch_match(facet["transactions"])
+            display = [item for item in matched if _matches(item, display_match)]
+            display_frame = _frame(display)
+            page_branch = facet["transactions"]
+            display.sort(
+                key=lambda item: (
+                    -item["transaction_timestamp"].timestamp(),
+                    item["transaction_id"],
+                )
             )
-        )
-        offset = next(stage["$skip"] for stage in page_branch if "$skip" in stage)
-        limit = next(stage["$limit"] for stage in page_branch if "$limit" in stage)
-
-        alert_match = _branch_match(facet["alerts"])
-        if alert_match:
-            active = [item for item in active if _matches(item, alert_match)]
-        alert_records = _alert_records(active, facet["alerts"])
-
-        return [
-            {
-                "metrics": [summary_metrics(display_frame)] if display else [],
-                "gateway_summary": _records(gateway_summary(display_frame)),
-                "trend": _records(success_rate_series(display_frame)),
-                "failure_summary": _records(
-                    failure_breakdown(display_frame, dimension="Latency Band")
-                ),
-                "alerts": alert_records,
-                "transactions": display[offset : offset + limit],
-                "total_count": [{"count": len(display)}] if display else [],
-                "metadata": _metadata(active, facet["metadata"]),
-            }
-        ]
+            offset = next(stage["$skip"] for stage in page_branch if "$skip" in stage)
+            limit = next(stage["$limit"] for stage in page_branch if "$limit" in stage)
+            result.update(
+                {
+                    "metrics": [summary_metrics(display_frame)] if display else [],
+                    "gateway_summary": _records(gateway_summary(display_frame)),
+                    "trend": _records(success_rate_series(display_frame)),
+                    "failure_summary": _records(
+                        failure_breakdown(display_frame, dimension="Latency Band")
+                    ),
+                    "transactions": display[offset : offset + limit],
+                    "total_count": [{"count": len(display)}] if display else [],
+                }
+            )
+        if "alerts" in facet:
+            alert_match = _branch_match(facet["alerts"])
+            history = [item for item in matched if _matches(item, alert_match)]
+            result.update(
+                {
+                    "alerts": _alert_records(history, facet["alerts"]),
+                    "metadata": _metadata(matched, facet["metadata"]),
+                }
+            )
+        return [result]
 
     def find(self, *_args: object, **_kwargs: object) -> None:
         self.find_called = True
@@ -264,8 +267,8 @@ def _alert_records(
     return records
 
 
-def test_pipeline_scopes_display_filters_but_not_alerts_or_metadata() -> None:
-    """Display filters cannot narrow active alert history or source metadata."""
+def test_display_filters_precede_facet_while_history_stays_active_only() -> None:
+    """Mongo can use display indexes without narrowing alerts or metadata."""
     database = Database([_document("TX-1", status="Failed")])
 
     mongodb.MongoDashboardRepository(database).fetch(
@@ -273,21 +276,25 @@ def test_pipeline_scopes_display_filters_but_not_alerts_or_metadata() -> None:
     )
 
     collection = database["transactions"]
-    pipeline = collection.aggregate_calls[0]
-    assert pipeline[0] == {"$match": {"is_deleted": {"$ne": True}}}
-    facet = pipeline[1]["$facet"]
-    display_match = {"transaction_status": {"$in": ["Failed"]}}
-    for name in (
+    assert len(collection.aggregate_calls) == 2
+    display_pipeline, history_pipeline = collection.aggregate_calls
+    assert display_pipeline[0] == {
+        "$match": {
+            "is_deleted": {"$ne": True},
+            "transaction_status": {"$in": ["Failed"]},
+        }
+    }
+    assert set(display_pipeline[1]["$facet"]) == {
         "metrics",
         "gateway_summary",
         "trend",
         "failure_summary",
         "transactions",
         "total_count",
-    ):
-        assert facet[name][0] == {"$match": display_match}
-    assert _branch_match(facet["alerts"]) == {}
-    assert _branch_match(facet["metadata"]) == {}
+    }
+    assert history_pipeline[0] == {"$match": {"is_deleted": {"$ne": True}}}
+    assert set(history_pipeline[1]["$facet"]) == {"alerts", "metadata"}
+    facet = display_pipeline[1]["$facet"]
     assert {"$sort": {"transaction_timestamp": -1, "transaction_id": 1}} in facet[
         "transactions"
     ]
@@ -397,7 +404,7 @@ def test_metadata_is_deterministic_and_independent_of_display_filters() -> None:
 
     assert snapshot.transactions["Transaction ID"].tolist() == ["TX-NEW"]
     assert snapshot.simulation_version == "legacy-v0"
-    metadata = database["transactions"].aggregate_calls[0][1]["$facet"]["metadata"]
+    metadata = database["transactions"].aggregate_calls[1][1]["$facet"]["metadata"]
     assert metadata[0] == {"$sort": {"transaction_timestamp": 1, "transaction_id": 1}}
 
 
@@ -476,8 +483,9 @@ def test_date_and_dimension_filters_share_one_display_match() -> None:
         PageRequest(number=1, size=1),
     )
 
-    facet = database["transactions"].aggregate_calls[0][1]["$facet"]
-    assert _branch_match(facet["transactions"]) == {
+    display_match = database["transactions"].aggregate_calls[0][0]["$match"]
+    assert display_match == {
+        "is_deleted": {"$ne": True},
         "bank_gateway": {"$in": ["Gateway A"]},
         "transaction_type": {"$in": ["Transfer"]},
         "device_used": {"$in": ["Mobile"]},
