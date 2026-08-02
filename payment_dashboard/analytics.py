@@ -4,6 +4,8 @@ from datetime import date
 
 import pandas as pd
 
+from payment_dashboard.config import FAILED_STATUS, P95_QUANTILE, SUCCESS_STATUS
+
 
 def add_latency_band(frame: pd.DataFrame) -> pd.DataFrame:
     result = frame.copy()
@@ -17,21 +19,23 @@ def add_latency_band(frame: pd.DataFrame) -> pd.DataFrame:
 
 def summary_metrics(frame: pd.DataFrame) -> dict[str, int | float]:
     count = len(frame)
-    success_rate = frame["Transaction Status"].eq("Success").mean() if count else 0.0
+    success_rate = (
+        frame["Transaction Status"].eq(SUCCESS_STATUS).mean() if count else 0.0
+    )
     return {
         "transaction_count": count,
         "success_rate": float(success_rate),
-        "failed_count": int(frame["Transaction Status"].eq("Failed").sum()),
+        "failed_count": int(frame["Transaction Status"].eq(FAILED_STATUS).sum()),
         "average_latency_ms": float(frame["Latency (ms)"].mean()) if count else 0.0,
         "p95_latency_ms": (
-            float(frame["Latency (ms)"].quantile(0.95)) if count else 0.0
+            float(frame["Latency (ms)"].quantile(P95_QUANTILE)) if count else 0.0
         ),
     }
 
 
 def gateway_summary(frame: pd.DataFrame) -> pd.DataFrame:
     working = frame.assign(
-        is_success=frame["Transaction Status"].eq("Success").astype(int)
+        is_success=frame["Transaction Status"].eq(SUCCESS_STATUS).astype(int)
     )
     return (
         working.groupby("Bank Gateway", observed=True)
@@ -46,7 +50,7 @@ def gateway_summary(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def failure_breakdown(frame: pd.DataFrame, dimension: str) -> pd.DataFrame:
-    failures = frame.loc[frame["Transaction Status"].eq("Failed")]
+    failures = frame.loc[frame["Transaction Status"].eq(FAILED_STATUS)]
     return (
         failures.groupby(dimension, observed=True)
         .size()
@@ -63,7 +67,7 @@ def success_rate_series(
     if frame.empty:
         return pd.DataFrame(columns=["Timestamp", "success_rate", "transaction_count"])
     working = frame.assign(
-        is_success=frame["Transaction Status"].eq("Success").astype(int)
+        is_success=frame["Transaction Status"].eq(SUCCESS_STATUS).astype(int)
     ).set_index("Timestamp")
     return (
         working.resample(frequency)

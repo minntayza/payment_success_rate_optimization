@@ -31,6 +31,11 @@ SIMULATION_PROBABILITY_RANGE = (0.55, 0.99)
 # Alert thresholds
 ALERT_WINDOW_SIZE = 50
 ALERT_THRESHOLD = 0.10  # 10 percentage points
+P95_QUANTILE = 0.95
+
+# Shared transaction outcome labels
+SUCCESS_STATUS = "Success"
+FAILED_STATUS = "Failed"
 
 # Data paths
 DEFAULT_DATA_PATH = Path("data/processed/transactions_with_gateways.csv")
@@ -39,7 +44,7 @@ DEFAULT_DATA_PATH = Path("data/processed/transactions_with_gateways.csv")
 CHART_COLORS = ["#2563EB", "#06B6D4", "#8B5CF6", "#F59E0B"]
 
 # Schema validation
-STATUSES = frozenset({"Success", "Failed"})
+STATUSES = frozenset({SUCCESS_STATUS, FAILED_STATUS})
 
 REQUIRED_COLUMNS = frozenset(
     {

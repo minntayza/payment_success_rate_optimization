@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import pandas as pd
 
-from payment_dashboard.config import ALERT_THRESHOLD, ALERT_WINDOW_SIZE, GATEWAYS
+from payment_dashboard.config import (
+    ALERT_THRESHOLD,
+    ALERT_WINDOW_SIZE,
+    GATEWAYS,
+    SUCCESS_STATUS,
+)
 
 
 def calculate_baselines(full_frame: pd.DataFrame) -> pd.Series:
     return (
         full_frame.assign(
-            is_success=full_frame["Transaction Status"].eq("Success").astype(int)
+            is_success=full_frame["Transaction Status"].eq(SUCCESS_STATUS).astype(int)
         )
         .groupby("Bank Gateway", observed=True)["is_success"]
         .mean()
@@ -29,7 +34,9 @@ def evaluate_alerts(
         gateway_rows = replay_frame.loc[replay_frame["Bank Gateway"].eq(gateway)]
         sufficient = len(gateway_rows) >= window_size
         rolling_rate = (
-            gateway_rows.tail(window_size)["Transaction Status"].eq("Success").mean()
+            gateway_rows.tail(window_size)["Transaction Status"]
+            .eq(SUCCESS_STATUS)
+            .mean()
             if sufficient
             else float("nan")
         )
