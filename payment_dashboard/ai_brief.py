@@ -11,7 +11,7 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
-from http.client import IncompleteRead
+from http.client import IncompleteRead, InvalidURL
 from pathlib import Path
 from typing import Literal
 from urllib.error import HTTPError, URLError
@@ -369,6 +369,8 @@ def generate_brief_result(
             if _is_retryable(exc) and attempt + 1 < total_attempts:
                 wait(RETRY_DELAY_SECONDS)
                 continue
+            return local_result
+        except InvalidURL:
             return local_result
         except OSError:
             return local_result

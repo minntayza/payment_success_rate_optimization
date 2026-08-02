@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from http.client import IncompleteRead
+from http.client import IncompleteRead, InvalidURL
 from io import BytesIO
 from unittest.mock import Mock
 from urllib.error import HTTPError, URLError
@@ -201,6 +201,27 @@ def test_invalid_base_url_returns_local_fallback(
 
     assert result.origin == "local"
     provider.assert_not_called()
+
+
+def test_invalid_url_from_transport_returns_local_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    provider = Mock(side_effect=InvalidURL("nonnumeric port: 'bad'"))
+    sleep = Mock()
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="http://example.com:bad",
+        api_key="x",
+        attempts=2,
+        sleep=sleep,
+    )
+
+    assert provider.call_count == 1
+    sleep.assert_not_called()
+    assert result.origin == "local"
 
 
 def test_retry_exhaustion_returns_local_brief(
@@ -492,6 +513,29 @@ def test_valid_myanmar_evidence_reference_is_accepted(
     )
 
     assert result.origin == "ai"
+
+
+def test_native_myanmar_numerals_cannot_bypass_evidence_whitelist(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    mismatched = {
+        "summary": "စုစုပေါင်းအခြေအနေကို စစ်ဆေးပြီးဖြစ်သည်။",
+        "risks": ["Gateway A အချက်အလက် မကိုက်ညီပါ။"],
+        "actions": ["သရုပ်ပြ routing ကို ပြန်လည်စစ်ဆေးပါ။"],
+        "evidence": ["Gateway A: ငွေပေးချေမှု ၂ ခု; အောင်မြင်နှုန်း ၀.၀%။"],
+    }
+    provider = Mock(return_value=_provider_response(mismatched))
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        language="my",
+        base_url="https://provider",
+        api_key="x",
+    )
+
+    assert result.origin == "local"
 
 
 def test_non_retryable_transport_failure_returns_local_without_retry(
