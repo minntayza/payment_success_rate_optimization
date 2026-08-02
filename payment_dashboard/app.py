@@ -541,11 +541,6 @@ def render_app() -> None:
     render_kpis(snapshot, language)
     render_gateway_health(snapshot.alerts, language)
 
-    page_state = DashboardState(
-        replay_frame=snapshot.transactions,
-        display_frame=snapshot.transactions,
-        alerts=snapshot.alerts,
-    )
     if snapshot.total_transactions == 0:
         render_empty_state(language)
     else:
@@ -555,7 +550,7 @@ def render_app() -> None:
             render_success_trend(snapshot, language)
         with failure_column:
             render_failure_analysis(snapshot, language)
-        render_ai_operations_brief(page_state, language)
+        render_ai_operations_brief(snapshot, language, filters=filters)
         render_recent_transactions(snapshot.transactions, language, limit=None)
         render_interpretation_guide(language)
 

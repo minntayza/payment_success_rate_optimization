@@ -7,13 +7,15 @@ import plotly.express as px
 import streamlit as st
 
 from payment_dashboard.ai_brief import (
-    AIBriefError,
+    BriefResult,
     build_brief_facts,
+    configured_brief_model,
     facts_fingerprint,
-    generate_brief,
+    generate_brief_result,
 )
 from payment_dashboard.analytics import summary_metrics
 from payment_dashboard.config import CHART_COLORS
+from payment_dashboard.dashboard_repository import DashboardFilters
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.models import DashboardSnapshot, DashboardState, DataSource
 from payment_dashboard.ui.charts import (
@@ -47,7 +49,7 @@ RECENT_COLUMN_KEYS = {
     "Fraud Flag": "table.fraud_flag",
 }
 
-AI_BRIEF_TEXT_KEY = "ai_brief_text"
+AI_BRIEF_RESULT_KEY = "ai_brief_result"
 AI_BRIEF_FINGERPRINT_KEY = "ai_brief_fingerprint"
 EMPTY_MASCOT_DATA_URI = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' "
@@ -142,44 +144,73 @@ def render_empty_state(language: Language = DEFAULT_LANGUAGE) -> None:
 
 
 def render_ai_operations_brief(
-    state: DashboardState,
+    state: DashboardSnapshot,
     language: Language = DEFAULT_LANGUAGE,
+    *,
+    filters: DashboardFilters | None = None,
 ) -> None:
     """Render analysis from aggregate facts in the selected language."""
+    filters = filters or DashboardFilters()
     with st.container(key="ai_brief_card"):
         st.subheader(translate("ai.title", language))
         st.caption(translate("ai.description", language))
-        facts = build_brief_facts(state.display_frame, state.alerts)
-        fingerprint = facts_fingerprint({"language": language, "facts": facts})
+        facts = build_brief_facts(state)
+        model = configured_brief_model()
+        fingerprint = facts_fingerprint(
+            {
+                "language": language,
+                "model": model,
+                "filters": {
+                    "gateways": filters.gateways,
+                    "transaction_types": filters.transaction_types,
+                    "devices": filters.devices,
+                    "statuses": filters.statuses,
+                    "start": filters.start.isoformat() if filters.start else None,
+                    "end": filters.end.isoformat() if filters.end else None,
+                },
+                "data_source": state.source.value,
+                "simulation_version": state.simulation_version,
+                "facts": facts,
+            }
+        )
 
         if st.session_state.get(AI_BRIEF_FINGERPRINT_KEY) != fingerprint:
-            st.session_state.pop(AI_BRIEF_TEXT_KEY, None)
+            st.session_state.pop(AI_BRIEF_RESULT_KEY, None)
             st.session_state.pop(AI_BRIEF_FINGERPRINT_KEY, None)
 
         generate = st.button(
             translate("ai.generate", language),
-            disabled=state.display_frame.empty,
+            disabled=state.total_transactions == 0,
             type="primary",
         )
-        if state.display_frame.empty:
+        if state.total_transactions == 0:
             st.info(translate("ai.requires_data", language))
 
         if generate:
-            try:
-                with st.spinner(translate("ai.generating", language)):
-                    brief = generate_brief(facts, language=language)
-            except AIBriefError:
-                st.error(translate("ai.invalid_response", language))
-            else:
-                st.session_state[AI_BRIEF_TEXT_KEY] = brief
-                st.session_state[AI_BRIEF_FINGERPRINT_KEY] = fingerprint
+            with st.spinner(translate("ai.generating", language)):
+                brief = generate_brief_result(
+                    facts,
+                    language=language,
+                    model=model,
+                )
+            st.session_state[AI_BRIEF_RESULT_KEY] = brief
+            st.session_state[AI_BRIEF_FINGERPRINT_KEY] = fingerprint
 
-        brief_text = st.session_state.get(AI_BRIEF_TEXT_KEY)
-        if isinstance(brief_text, str):
+        brief = st.session_state.get(AI_BRIEF_RESULT_KEY)
+        if isinstance(brief, BriefResult):
             with st.container(key="ai_brief_result"):
-                st.markdown(brief_text)
+                st.caption(translate(f"ai.origin.{brief.origin}", language))
+                st.markdown(f"**{translate('ai.summary', language)}**")
+                st.markdown(brief.content.summary)
+                st.markdown(f"**{translate('ai.risks', language)}**")
+                for risk in brief.content.risks:
+                    st.markdown(f"- {risk}")
+                st.markdown(f"**{translate('ai.actions', language)}**")
+                for action in brief.content.actions:
+                    st.markdown(f"- {action}")
             with st.expander(translate("ai.evidence", language)):
-                st.json(facts)
+                for evidence in brief.content.evidence:
+                    st.markdown(f"- {evidence}")
 
 
 def render_kpis(
