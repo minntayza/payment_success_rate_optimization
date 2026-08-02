@@ -180,6 +180,8 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "admin.created": "Transaction created.",
         "admin.updated": "Transaction updated.",
         "admin.deleted": "Transaction soft-deleted.",
+        "admin.no_transactions_edit": "No transactions are available to edit.",
+        "admin.no_transactions_delete": "No transactions are available to delete.",
         "test.fallback": "Fallback",
     },
     "my": {
@@ -340,6 +342,8 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "admin.created": "ငွေပေးချေမှု အသစ်ထည့်ပြီးပါပြီ။",
         "admin.updated": "ငွေပေးချေမှု ပြင်ဆင်ပြီးပါပြီ။",
         "admin.deleted": "ငွေပေးချေမှုကို soft-delete ပြုလုပ်ပြီးပါပြီ။",
+        "admin.no_transactions_edit": "ပြင်ဆင်ရန် ငွေပေးချေမှု မရှိပါ။",
+        "admin.no_transactions_delete": "ဖျက်ရန် ငွေပေးချေမှု မရှိပါ။",
         "test.fallback": "",
     },
 }

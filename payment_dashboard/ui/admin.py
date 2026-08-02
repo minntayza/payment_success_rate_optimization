@@ -200,6 +200,12 @@ def _render_manager(database: Any, frame: pd.DataFrame, language: Language) -> b
             st.success(translate("admin.created", language))
             changed = True
     ids = frame["Transaction ID"].astype(str).tolist()
+    if not ids:
+        with edit_tab:
+            st.info(translate("admin.no_transactions_edit", language))
+        with delete_tab:
+            st.info(translate("admin.no_transactions_delete", language))
+        return changed
     with edit_tab:
         selected = st.selectbox(translate("admin.choose", language), ids, key="edit_id")
         row = frame.loc[frame["Transaction ID"].astype(str).eq(selected)].iloc[0]

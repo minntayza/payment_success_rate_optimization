@@ -238,6 +238,36 @@ def _load_snapshot(
         return demo_snapshot(diagnostic)
 
 
+def _load_valid_snapshot(
+    filters: DashboardFilters,
+    requested_page: int,
+    language: Language = DEFAULT_LANGUAGE,
+) -> tuple[DashboardSnapshot, int, int]:
+    """Fetch a bounded page, correcting stale page state with one refetch."""
+    page_number = max(1, requested_page)
+    if page_number != requested_page:
+        st.session_state["transaction_page"] = page_number
+    snapshot = _load_snapshot(
+        filters,
+        PageRequest(number=page_number, size=TRANSACTION_PAGE_SIZE),
+        language,
+    )
+    total_pages = max(
+        1,
+        (snapshot.total_transactions + TRANSACTION_PAGE_SIZE - 1)
+        // TRANSACTION_PAGE_SIZE,
+    )
+    if page_number > total_pages:
+        page_number = total_pages
+        st.session_state["transaction_page"] = page_number
+        snapshot = _load_snapshot(
+            filters,
+            PageRequest(number=page_number, size=TRANSACTION_PAGE_SIZE),
+            language,
+        )
+    return snapshot, page_number, total_pages
+
+
 def _retry_database() -> None:
     """Discard cached connection/query state before rerunning the dashboard."""
     st.cache_data.clear()
@@ -490,28 +520,21 @@ def render_app() -> None:
     st.caption(translate("dashboard.disclaimer", language))
 
     filters = _render_repository_filters(language)
-    page_number = int(
-        st.number_input(
-            translate("pagination.page", language),
-            min_value=1,
-            value=1,
-            step=1,
-            key="transaction_page",
-            disabled=True,
-        )
-    )
-    snapshot = _load_snapshot(
+    requested_page = int(st.session_state.get("transaction_page", 1))
+    snapshot, page_number, total_pages = _load_valid_snapshot(
         filters,
-        PageRequest(number=page_number, size=TRANSACTION_PAGE_SIZE),
+        requested_page,
         language,
     )
-    _render_source_status(snapshot, language)
-
-    total_pages = max(
-        1,
-        (snapshot.total_transactions + TRANSACTION_PAGE_SIZE - 1)
-        // TRANSACTION_PAGE_SIZE,
+    st.number_input(
+        translate("pagination.page", language),
+        min_value=1,
+        value=page_number,
+        step=1,
+        key="transaction_page",
+        disabled=True,
     )
+    _render_source_status(snapshot, language)
 
     render_story_hero(snapshot, snapshot.source.value, language)
     _render_source_badge(snapshot, language)

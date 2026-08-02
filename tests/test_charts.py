@@ -7,11 +7,23 @@ import pytest
 from plotly import graph_objects as go
 
 from payment_dashboard.analytics import add_latency_band
+from payment_dashboard.dashboard_repository import (
+    DashboardFilters,
+    PageRequest,
+    PandasDashboardRepository,
+)
+from payment_dashboard.models import DashboardSnapshot
+from payment_dashboard.ui import sections
 from payment_dashboard.ui.charts import (
     failure_breakdown_chart,
     gateway_success_chart,
     gateway_volume_chart,
     success_trend_chart,
+)
+from payment_dashboard.ui.sections import (
+    render_failure_analysis,
+    render_gateway_performance,
+    render_success_trend,
 )
 
 
@@ -21,6 +33,72 @@ def dashboard_fixture(sample_transactions: pd.DataFrame) -> pd.DataFrame:
     frame["Timestamp"] = pd.to_datetime(frame["Timestamp"])
     frame["Bank Gateway"] = ["Gateway A", "Gateway A", "Gateway B", "Gateway B"]
     return add_latency_band(frame)
+
+
+@pytest.fixture
+def dashboard_snapshot(dashboard_fixture: pd.DataFrame) -> DashboardSnapshot:
+    return PandasDashboardRepository(dashboard_fixture).fetch(
+        DashboardFilters(),
+        PageRequest(),
+    )
+
+
+def test_snapshot_gateway_charts_localize_myanmar_axes(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_snapshot: DashboardSnapshot,
+) -> None:
+    charts: list[go.Figure] = []
+
+    class Column:
+        def plotly_chart(self, chart: go.Figure, **_kwargs: object) -> None:
+            charts.append(chart)
+
+    monkeypatch.setattr(sections.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections.st, "columns", lambda _count: [Column(), Column()])
+
+    render_gateway_performance(dashboard_snapshot, language="my")
+
+    assert charts[0].layout.xaxis.title.text == "ဂိတ်ဝေး"
+    assert charts[0].layout.yaxis.title.text == "အောင်မြင်နှုန်း"
+    assert charts[1].layout.xaxis.title.text == "ဂိတ်ဝေး"
+    assert charts[1].layout.yaxis.title.text == "ငွေပေးချေမှုများ"
+
+
+def test_snapshot_trend_chart_localizes_myanmar_axes(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_snapshot: DashboardSnapshot,
+) -> None:
+    charts: list[go.Figure] = []
+    monkeypatch.setattr(sections.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(
+        sections.st,
+        "plotly_chart",
+        lambda chart, **_kwargs: charts.append(chart),
+    )
+
+    render_success_trend(dashboard_snapshot, language="my")
+
+    assert charts[0].layout.xaxis.title.text == "အချိန်မှတ်တမ်း"
+    assert charts[0].layout.yaxis.title.text == "အောင်မြင်နှုန်း"
+
+
+def test_snapshot_failure_chart_localizes_myanmar_axes(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_snapshot: DashboardSnapshot,
+) -> None:
+    charts: list[go.Figure] = []
+    monkeypatch.setattr(sections.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections.st, "caption", lambda *_: None)
+    monkeypatch.setattr(
+        sections.st,
+        "plotly_chart",
+        lambda chart, **_kwargs: charts.append(chart),
+    )
+
+    render_failure_analysis(dashboard_snapshot, language="my")
+
+    assert charts[0].layout.xaxis.title.text == "တုံ့ပြန်ချိန် အပိုင်းအခြား"
+    assert charts[0].layout.yaxis.title.text == "မအောင်မြင်သော"
 
 
 @pytest.mark.parametrize(

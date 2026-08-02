@@ -357,6 +357,42 @@ def dashboard_state(sample_transactions: pd.DataFrame) -> DashboardState:
     return DashboardState(frame, frame, alerts)
 
 
+def test_snapshot_page_is_clamped_and_refetched_after_total_shrinks(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    base = PandasDashboardRepository(dashboard_state.display_frame).fetch(
+        DashboardFilters(),
+        PageRequest(),
+    )
+    stale_page = replace(
+        base, transactions=base.transactions.iloc[0:0], total_transactions=1
+    )
+    valid_page = replace(
+        base, transactions=base.transactions.iloc[:1], total_transactions=1
+    )
+    requested_pages: list[int] = []
+
+    def fetch(_filters, page, _language):
+        requested_pages.append(page.number)
+        return stale_page if page.number == 2 else valid_page
+
+    monkeypatch.setattr(app_module, "_load_snapshot", fetch)
+    monkeypatch.setattr(app_module.st, "session_state", {"transaction_page": 2})
+
+    snapshot, page_number, total_pages = app_module._load_valid_snapshot(
+        DashboardFilters(),
+        requested_page=2,
+        language="en",
+    )
+
+    assert requested_pages == [2, 1]
+    assert page_number == 1
+    assert total_pages == 1
+    assert app_module.st.session_state["transaction_page"] == 1
+    pd.testing.assert_frame_equal(snapshot.transactions, valid_page.transactions)
+
+
 def _patch_render_app_shell(
     monkeypatch: MonkeyPatch,
     state: DashboardState,

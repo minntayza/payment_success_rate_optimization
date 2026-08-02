@@ -62,6 +62,27 @@ EMPTY_MASCOT_DATA_URI = (
 )
 
 
+def _dashboard_metrics(
+    state: DashboardState | DashboardSnapshot,
+) -> dict[str, int | float]:
+    """Adapt legacy and repository dashboard state to one metric mapping."""
+    if isinstance(state, DashboardSnapshot):
+        return dict(state.metrics)
+    return summary_metrics(state.display_frame)
+
+
+def _snapshot_chart_labels(language: Language) -> dict[str, str]:
+    """Return localized labels shared by every snapshot-backed chart."""
+    return {
+        "Bank Gateway": translate("dimensions.gateway", language),
+        "Timestamp": translate("dimensions.timestamp", language),
+        "Latency Band": translate("dimensions.latency_band", language),
+        "success_rate": translate("kpi.success_rate", language),
+        "transaction_count": translate("kpi.transactions", language),
+        "failed_count": translate("kpi.failed", language),
+    }
+
+
 def build_story_hero_html(
     successful: int,
     metrics: dict[str, int | float],
@@ -88,11 +109,7 @@ def render_story_hero(
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render the localized success-first dashboard story."""
-    metrics = (
-        dict(state.metrics)
-        if isinstance(state, DashboardSnapshot)
-        else summary_metrics(state.display_frame)
-    )
+    metrics = _dashboard_metrics(state)
     successful = int(metrics["transaction_count"] - metrics["failed_count"])
     status_key = (
         "hero.database_live"
@@ -170,11 +187,7 @@ def render_kpis(
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render the top-level KPI metric cards."""
-    metrics = (
-        dict(state.metrics)
-        if isinstance(state, DashboardSnapshot)
-        else summary_metrics(state.display_frame)
-    )
+    metrics = _dashboard_metrics(state)
     active_alerts = int(state.alerts["is_alert"].sum())
 
     kpis = (
@@ -287,6 +300,7 @@ def render_gateway_performance(
     left, right = st.columns(2)
     if isinstance(frame, DashboardSnapshot):
         summary = frame.gateway_summary
+        labels = _snapshot_chart_labels(language)
         success_chart = px.bar(
             summary,
             x="Bank Gateway",
@@ -296,6 +310,7 @@ def render_gateway_performance(
             title=translate("charts.success_rate_by_gateway", language),
             range_y=[0, 1],
             text_auto=".1%",
+            labels=labels,
         )
         success_chart.update_layout(showlegend=False, yaxis_tickformat=".0%")
         volume_chart = px.bar(
@@ -306,6 +321,7 @@ def render_gateway_performance(
             color_discrete_sequence=CHART_COLORS,
             title=translate("charts.transaction_volume_by_gateway", language),
             text_auto=True,
+            labels=labels,
         )
         volume_chart.update_layout(showlegend=False)
     else:
@@ -322,6 +338,7 @@ def render_success_trend(
     """Render the success rate trend line chart."""
     st.subheader(translate("charts.success_trend", language))
     if isinstance(frame, DashboardSnapshot):
+        labels = _snapshot_chart_labels(language)
         chart = px.line(
             frame.trend,
             x="Timestamp",
@@ -329,6 +346,7 @@ def render_success_trend(
             markers=True,
             color_discrete_sequence=["#2563EB"],
             title=translate("charts.success_trend", language),
+            labels=labels,
         )
         chart.update_layout(yaxis_tickformat=".0%", yaxis_range=[0, 1])
     else:
@@ -344,6 +362,7 @@ def render_failure_analysis(
     st.subheader(translate("sections.failure_analysis", language))
     st.caption(translate("sections.failure_analysis_description", language))
     if isinstance(frame, DashboardSnapshot):
+        labels = _snapshot_chart_labels(language)
         chart = px.bar(
             frame.failure_summary,
             x="Latency Band",
@@ -355,6 +374,7 @@ def render_failure_analysis(
             ),
             color_discrete_sequence=["#F97316"],
             text_auto=True,
+            labels=labels,
         )
         chart.update_layout(showlegend=False)
         st.plotly_chart(chart, width="stretch")
