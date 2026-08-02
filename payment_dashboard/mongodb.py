@@ -203,7 +203,7 @@ def _display_dashboard_pipeline(
     page: PageRequest,
 ) -> list[dict[str, object]]:
     """Build the indexable filtered aggregation for display data."""
-    match = {"is_deleted": {"$ne": True}, **_display_match(filters)}
+    match = {"is_deleted": False, **_display_match(filters)}
     return [
         {"$match": match},
         {
@@ -232,7 +232,7 @@ def _display_dashboard_pipeline(
 def _history_pipeline() -> list[dict[str, object]]:
     """Build the active-only aggregation for alerts and source metadata."""
     return [
-        {"$match": {"is_deleted": {"$ne": True}}},
+        {"$match": {"is_deleted": False}},
         {
             "$facet": {
                 "alerts": _alerts_pipeline(),
@@ -459,7 +459,7 @@ def _alerts_pipeline() -> list[dict[str, object]]:
         {
             "$setWindowFields": {
                 "partitionBy": "$bank_gateway",
-                "sortBy": {"transaction_timestamp": -1, "transaction_id": 1},
+                "sortBy": {"transaction_timestamp": -1, "transaction_id": -1},
                 "output": {"recency_rank": {"$documentNumber": {}}},
             }
         },
@@ -689,7 +689,6 @@ def load_dashboard_transactions(
                 "fallback",
                 "database.fallback_not_configured",
             )
-        ensure_indexes(resources.database)
         snapshot = MongoDashboardRepository(resources.database).fetch(
             DashboardFilters(),
             PageRequest(number=1, size=100),

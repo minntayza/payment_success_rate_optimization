@@ -16,8 +16,8 @@ Before responding to a customer, record:
 - Latency
 - Fraud flag
 
-The displayed gateway is a randomly assigned academic label. It is not evidence
-that a real bank processed the transaction.
+The displayed gateway and dashboard outcome are controlled synthetic academic
+values. They are not evidence that a real bank processed the transaction.
 
 ## Failure interpretation
 
@@ -33,7 +33,7 @@ that a real bank processed the transaction.
 
 ## Alert interpretation
 
-An alert means the gateway's latest 50 replayed transactions are at least 10
+An alert means the gateway's latest 50 active transactions are at least 10
 percentage points below its success rate across the complete prepared dataset.
 
 For example:
@@ -46,8 +46,8 @@ Result:            Alert
 ```
 
 An alert is a demonstration signal, not evidence of a real bank outage. If the
-dashboard shows `Insufficient history`, fewer than 50 transactions have been
-replayed for that gateway.
+dashboard shows `Insufficient history`, fewer than 50 active transactions exist
+for that gateway.
 
 Dashboard filters do not change alerts. This prevents a status filter such as
 `Failed` from manufacturing a false gateway alert.

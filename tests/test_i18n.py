@@ -34,6 +34,7 @@ PLAYFUL_KEYS = {
     "database.fallback_unavailable",
     "source.live_label",
     "source.demo_label",
+    "source.simulation_disclosure",
     "source.degraded_warning",
     "source.diagnostics",
     "source.diagnostic_category",
@@ -53,6 +54,16 @@ def test_translation_catalogs_have_matching_keys() -> None:
 def test_playful_dashboard_copy_exists_in_both_languages() -> None:
     for language in ("en", "my"):
         assert all(TRANSLATIONS[language][key].strip() for key in PLAYFUL_KEYS)
+
+
+def test_simulation_disclosure_is_truthful_in_both_languages() -> None:
+    english = translate("source.simulation_disclosure", "en", version="controlled-v1")
+    myanmar = translate("source.simulation_disclosure", "my", version="controlled-v1")
+
+    assert "controlled-v1" in english
+    assert "gateway assignments and dashboard outcomes are synthetic" in english
+    assert "controlled-v1" in myanmar
+    assert "Gateway" in myanmar and "အတု" in myanmar
 
 
 def test_english_is_default_and_burmese_is_supported() -> None:

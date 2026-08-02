@@ -430,17 +430,20 @@ def _provider_request(
         "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": build_brief_prompt(facts, language)}],
     }
-    return urllib.request.Request(
+    request = urllib.request.Request(
         f"{base_url}/v1/messages",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "x-api-key": api_key,
             "anthropic-version": ANTHROPIC_VERSION,
             "User-Agent": "PaymentDashboard/0.1",
         },
         method="POST",
     )
+    # Unredirected headers are sent to this request but are not copied when
+    # urllib constructs a redirect request to another origin.
+    request.add_unredirected_header("x-api-key", api_key)
+    return request
 
 
 def _request_brief(

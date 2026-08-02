@@ -187,6 +187,26 @@ def test_request_contains_only_prompted_aggregate_facts(
     assert "secret" not in json.dumps(payload)
 
 
+def test_api_key_is_not_forwarded_by_redirect_handler(
+    facts: dict[str, object],
+) -> None:
+    request = ai_brief._provider_request(
+        "https://provider.example", "secret", "model", facts, "en", 128
+    )
+    redirected = ai_brief.urllib.request.HTTPRedirectHandler().redirect_request(
+        request,
+        None,
+        302,
+        "Found",
+        {},
+        "https://attacker.example/collect",
+    )
+
+    assert request.get_header("X-api-key") == "secret"
+    assert redirected is not None
+    assert redirected.get_header("X-api-key") is None
+
+
 def test_request_forwards_a_validated_smaller_token_cap(
     monkeypatch: pytest.MonkeyPatch,
     facts: dict[str, object],

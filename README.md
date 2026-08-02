@@ -17,8 +17,8 @@ must not be interpreted as measurements of real banks or payment gateways.
 - Strict CSV schema and value validation
 - Overall and gateway-level payment success metrics
 - Interactive filters for gateway, transaction type, device, status, and date
-- Chronological transaction replay
-- Latest-50 rolling gateway monitoring
+- Server-side paginated transaction history
+- Latest-50 active-history gateway monitoring
 - Alerts for drops of at least 10 percentage points below baseline
 - Top-of-page English/မြန်မာ language switch
 - Button-triggered AI Operations Brief in the active dashboard language,
@@ -170,24 +170,21 @@ automatically. Stop the server with `Ctrl+C`.
 
 1. Use the English/မြန်မာ switch above the title to choose the dashboard
    language. Gateway names and transaction category values remain unchanged.
-2. Move the replay slider to control how many chronological transactions have
-   arrived.
-3. Use sidebar filters to narrow the displayed KPIs, charts, and transaction
+2. Use sidebar filters to narrow the displayed KPIs, charts, and transaction
    table.
-4. Click **Generate AI Brief** for a summary of the current filtered view in the
+3. Click **Generate AI Brief** for a summary of the current filtered view in the
    active dashboard language. The output is retained until the underlying
    metrics or language change. Switching languages invalidates the previous
    brief, so generate a new one after the switch.
-5. Expand **Evidence sent to the AI model** to compare the generated text
+4. Expand **Evidence sent to the AI model** to compare the generated text
    with the exact aggregate facts supplied to MiMo.
-6. Review Gateway Health to compare each baseline with its latest 50 replayed
+5. Review Gateway Health to compare each baseline with its latest 50 active
    transactions.
-7. Use Failure Analysis to investigate patterns by fraud flag, latency band,
-   device, and transaction type.
-8. Use Recent Transactions to inspect individual records. The table is a
+6. Use Failure Analysis to investigate patterns by latency band.
+7. Use Recent Transactions to inspect individual records. The table is a
    bounded server-side page; use the Previous and Next controls to navigate,
    and changing repository filters returns to page 1.
-9. The administrator can expand **Administrator transaction manager**, enter the
+8. The administrator can expand **Administrator transaction manager**, enter the
    configured password, and create, edit, or soft-delete simulated records.
 
 The AI brief follows the active dashboard language, uses simulated gateway data,
@@ -196,7 +193,7 @@ provider is unavailable, the dashboard uses a deterministic local fallback
 without exposing the key.
 
 Display filters do not change alert calculations. Alerts always use the
-unfiltered chronological replay stream.
+full active transaction history.
 
 ## Metric definitions
 
@@ -204,11 +201,11 @@ unfiltered chronological replay stream.
   current display scope.
 - **Gateway baseline:** A gateway's success rate across the full prepared
   dataset.
-- **Rolling rate:** Success rate across the latest 50 replayed transactions for
+- **Rolling rate:** Success rate across the latest 50 active transactions for
   one gateway.
 - **Drop:** Gateway baseline minus its rolling rate.
 - **Alert:** A drop of at least 10 percentage points.
-- **Insufficient history:** Fewer than 50 replayed transactions for a gateway.
+- **Insufficient history:** Fewer than 50 active transactions for a gateway.
 - **Average latency:** Mean transaction latency in milliseconds.
 - **P95 latency:** The latency value at or below which 95% of transactions fall.
 
@@ -251,8 +248,7 @@ data/processed/transactions_with_gateways.csv
 
 ### A gateway shows insufficient history
 
-Move the replay slider forward until that gateway has at least 50 replayed
-transactions.
+Import or create enough active transactions for that gateway to reach 50 rows.
 
 ### The local port is already in use
 
@@ -264,9 +260,10 @@ Choose another port:
 
 ## Limitations
 
-- Gateway labels are random and do not describe real gateway performance.
-- The replay slider simulates arrival from a historical CSV; it is not a
-  production streaming pipeline.
+- Gateway assignments and dashboard outcomes use a fixed-seed controlled
+  simulation and do not describe real gateway performance.
+- The dashboard reads stored historical transactions; it is not a production
+  streaming pipeline.
 - The application does not connect to banks, payment APIs, or external
   alert-delivery services. Its MongoDB records remain simulated academic data.
 - The dataset has no explicit insufficient-balance, incorrect PIN, or incorrect

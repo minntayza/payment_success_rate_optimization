@@ -100,7 +100,7 @@ def test_load_queries_active_documents(monkeypatch) -> None:
 
         def aggregate(self, pipeline):
             self.aggregate_calls.append(pipeline)
-            assert pipeline[0] == {"$match": {"is_deleted": {"$ne": True}}}
+            assert pipeline[0] == {"$match": {"is_deleted": False}}
             facet = pipeline[1]["$facet"]
             if "transactions" in facet:
                 assert {"$limit": 100} in facet["transactions"]

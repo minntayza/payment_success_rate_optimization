@@ -78,7 +78,7 @@ def test_create_inserts_document_and_sanitized_audit(values) -> None:
     create_transaction(database, values)
     assert database.transactions.document["transaction_id"] == "TX-1"
     assert database.transactions.document["source_transaction_status"] == "Success"
-    assert database.transactions.document["simulation_version"] == "controlled-v1"
+    assert database.transactions.document["simulation_version"] == "manual-v1"
     event = database.audit.events[0]
     assert event["action"] == "INSERT"
     assert "pin_code" not in event["new_document"]
@@ -86,10 +86,14 @@ def test_create_inserts_document_and_sanitized_audit(values) -> None:
 
 def test_update_preserves_id_and_audits(values) -> None:
     database = Database()
+    values["Source Transaction Status"] = "Failed"
+    values["Simulation Version"] = "controlled-v1"
     update_transaction(database, "TX-1", values)
     query, update = database.transactions.update
-    assert query == {"transaction_id": "TX-1", "is_deleted": {"$ne": True}}
+    assert query == {"transaction_id": "TX-1", "is_deleted": False}
     assert "transaction_id" not in update["$set"]
+    assert update["$set"]["simulation_version"] == "manual-v1"
+    assert "source_transaction_status" not in update["$set"]
     assert database.audit.events[0]["action"] == "UPDATE"
 
 

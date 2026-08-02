@@ -293,7 +293,7 @@ def test_display_filters_precede_facet_while_history_stays_active_only() -> None
     display_pipeline, history_pipeline = collection.aggregate_calls
     assert display_pipeline[0] == {
         "$match": {
-            "is_deleted": {"$ne": True},
+            "is_deleted": False,
             "transaction_status": {"$in": ["Failed"]},
         }
     }
@@ -305,7 +305,7 @@ def test_display_filters_precede_facet_while_history_stays_active_only() -> None
         "transactions",
         "total_count",
     }
-    assert history_pipeline[0] == {"$match": {"is_deleted": {"$ne": True}}}
+    assert history_pipeline[0] == {"$match": {"is_deleted": False}}
     assert set(history_pipeline[1]["$facet"]) == {"alerts", "metadata"}
     facet = display_pipeline[1]["$facet"]
     assert {"$sort": {"transaction_timestamp": -1, "transaction_id": 1}} in facet[
@@ -390,6 +390,31 @@ def test_alerts_use_full_active_history_and_include_configured_gateways() -> Non
     gateway_a = snapshot.alerts.set_index("Bank Gateway").loc["Gateway A"]
     assert gateway_a["drop"] == 0.1
     assert bool(gateway_a["is_alert"]) is True
+
+
+def test_alert_cutoff_prefers_highest_transaction_ids_when_timestamps_tie() -> None:
+    timestamp = datetime(2025, 1, 17, 10, 0)
+    documents = [
+        _document(
+            f"TX-{number:03d}",
+            timestamp=timestamp,
+            status="Success" if number < 10 else "Failed",
+        )
+        for number in range(60)
+    ]
+    database = Database(documents)
+
+    snapshot = mongodb.MongoDashboardRepository(database).fetch(
+        DashboardFilters(), PageRequest(number=1, size=10)
+    )
+
+    gateway_a = snapshot.alerts.set_index("Bank Gateway").loc["Gateway A"]
+    assert gateway_a["rolling_rate"] == 0.0
+    alert_pipeline = database["transactions"].aggregate_calls[1][1]["$facet"]["alerts"]
+    assert alert_pipeline[0]["$setWindowFields"]["sortBy"] == {
+        "transaction_timestamp": -1,
+        "transaction_id": -1,
+    }
 
 
 def test_metadata_is_deterministic_and_independent_of_display_filters() -> None:
@@ -498,7 +523,7 @@ def test_date_and_dimension_filters_share_one_display_match() -> None:
 
     display_match = database["transactions"].aggregate_calls[0][0]["$match"]
     assert display_match == {
-        "is_deleted": {"$ne": True},
+        "is_deleted": False,
         "bank_gateway": {"$in": ["Gateway A"]},
         "transaction_type": {"$in": ["Transfer"]},
         "device_used": {"$in": ["Mobile"]},

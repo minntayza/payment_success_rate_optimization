@@ -275,19 +275,22 @@ def test_load_snapshot_uses_bounded_demo_repository_when_unconfigured(
     assert snapshot.transactions.iloc[0]["Transaction ID"] == "TX189"
 
 
-def test_load_snapshot_does_not_hide_unexpected_errors(
+def test_load_snapshot_does_not_create_indexes_during_interactive_reads(
     monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
 ) -> None:
     resources = app_module.MongoResources(object(), object())
     monkeypatch.setattr(app_module, "_mongo_resources", lambda *_: resources)
-    monkeypatch.setattr(
-        app_module,
-        "ensure_indexes",
-        MagicMock(side_effect=RuntimeError("programming defect")),
+    snapshot = PandasDashboardRepository(dashboard_state.replay_frame).fetch(
+        DashboardFilters(), PageRequest()
     )
+    repository = MagicMock()
+    repository.fetch.return_value = snapshot
+    monkeypatch.setattr(app_module, "MongoDashboardRepository", lambda *_: repository)
 
-    with pytest.raises(RuntimeError, match="programming defect"):
-        app_module._load_snapshot(DashboardFilters(), PageRequest())
+    result = app_module._load_snapshot(DashboardFilters(), PageRequest())
+
+    assert result is snapshot
 
 
 def test_database_retry_clears_both_streamlit_caches_and_reruns(
@@ -635,6 +638,33 @@ def test_database_fallback_status_uses_selected_language(
     assert warnings == [
         "MongoDB ကို အသုံးမပြုနိုင်ပါ။ သရုပ်ပြဖန်တီးထားသော ဒေတာကို အသုံးပြုနေပြီး ပြင်ဆင်မှုများကို ပိတ်ထားသည်။"
     ]
+
+
+def test_source_status_shows_simulation_version_once(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    rendered: list[str] = []
+    render_source_status = app_module._render_source_status
+    render_source_badge = app_module._render_source_badge
+    _, _, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
+    monkeypatch.setattr(app_module, "_render_source_status", render_source_status)
+    monkeypatch.setattr(app_module, "_render_source_badge", render_source_badge)
+    monkeypatch.setattr(
+        app_module.st, "markdown", lambda value, **_: rendered.append(value)
+    )
+    monkeypatch.setattr(app_module.st, "warning", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "expander", lambda *_: nullcontext())
+    monkeypatch.setattr(app_module.st, "write", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "button", lambda *_, **__: False)
+
+    app_module._render_source_status(snapshot, "en")
+
+    badge = "\n".join(rendered)
+    assert badge.count('class="source-status"') == 1
+    assert snapshot.simulation_version in badge
+    assert "gateway assignments and dashboard outcomes are synthetic" in badge
 
 
 @pytest.mark.integration

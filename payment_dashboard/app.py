@@ -9,6 +9,7 @@ import sys
 import types
 from dataclasses import replace
 from datetime import date
+from html import escape
 from pathlib import Path
 
 # When Streamlit Cloud runs this file directly, payment_dashboard is not
@@ -98,7 +99,6 @@ from payment_dashboard.mongodb import (  # noqa: E402
     MongoResources,
     classify_mongodb_error,
     create_resources_from_env,
-    ensure_indexes,
     load_dashboard_transactions,
 )
 from payment_dashboard.transaction_service import (  # noqa: E402
@@ -229,7 +229,6 @@ def _load_snapshot(
         resources = _mongo_resources(_mongo_configuration_fingerprint())
         if resources is None:
             return demo_snapshot("configuration")
-        ensure_indexes(resources.database)
         return MongoDashboardRepository(resources.database).fetch(filters, page)
     except Exception as exc:
         diagnostic = classify_mongodb_error(exc)
@@ -282,10 +281,16 @@ def _render_source_badge(snapshot: DashboardSnapshot, language: Language) -> Non
         if snapshot.source is DataSource.LIVE
         else "source.demo_label"
     )
+    disclosure = translate(
+        "source.simulation_disclosure",
+        language,
+        version=snapshot.simulation_version,
+    )
     st.markdown(
         '<div class="source-status">'
         f'<span class="status-pill">{snapshot.source.value.upper()}</span> '
-        f"{translate(label_key, language)}"
+        f"{translate(label_key, language)} · "
+        f"{escape(disclosure)}"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -536,7 +541,6 @@ def render_app() -> None:
     _render_source_status(snapshot, language)
 
     render_story_hero(snapshot, snapshot.source.value, language)
-    _render_source_badge(snapshot, language)
     render_kpis(snapshot, language)
     render_gateway_health(snapshot.alerts, language)
 

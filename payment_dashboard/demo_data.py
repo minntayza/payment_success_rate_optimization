@@ -5,14 +5,15 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from payment_dashboard.config import DEFAULT_SEED, GATEWAYS
+from payment_dashboard.config import DEFAULT_SEED
+from payment_dashboard.simulation import simulate_transactions
 
 
 def generate_demo_transactions(
     row_count: int = 1000,
     seed: int = DEFAULT_SEED,
 ) -> pd.DataFrame:
-    """Return schema-compatible simulated transactions with neutral outcomes."""
+    """Return schema-compatible transactions using the controlled simulation."""
     rng = np.random.default_rng(seed)
     transaction_numbers = np.arange(1, row_count + 1)
     timestamps = pd.date_range(
@@ -21,7 +22,7 @@ def generate_demo_transactions(
         freq="min",
     )
 
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         {
             "Transaction ID": [f"DEMO-{number:05d}" for number in transaction_numbers],
             "Sender Account ID": [
@@ -32,8 +33,7 @@ def generate_demo_transactions(
             ],
             "Transaction Amount": rng.uniform(5, 5000, row_count).round(2),
             "Transaction Type": rng.choice(
-                ["Transfer", "Deposit", "Withdrawal", "Payment"],
-                row_count,
+                ["Transfer", "Deposit", "Withdrawal"], row_count
             ),
             "Timestamp": timestamps,
             "Transaction Status": rng.choice(["Success", "Failed"], row_count),
@@ -42,10 +42,7 @@ def generate_demo_transactions(
                 ["Yangon", "Mandalay", "Naypyidaw", "Bago"],
                 row_count,
             ),
-            "Device Used": rng.choice(
-                ["Mobile", "Desktop", "Tablet"],
-                row_count,
-            ),
+            "Device Used": rng.choice(["Mobile", "Desktop"], row_count),
             "Network Slice ID": rng.choice(
                 ["Slice-1", "Slice-2", "Slice-3"],
                 row_count,
@@ -55,6 +52,6 @@ def generate_demo_transactions(
             "PIN Code": [
                 f"{number:04d}" for number in rng.integers(0, 10000, row_count)
             ],
-            "Bank Gateway": rng.choice(GATEWAYS, row_count),
         }
     )
+    return simulate_transactions(frame, seed=seed)

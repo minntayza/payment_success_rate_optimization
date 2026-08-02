@@ -40,6 +40,8 @@ def run_dashboard_smoke(
                 )
 
             source_badge = page.locator(SOURCE_BADGE_SELECTOR)
+            if source_badge.count() != 1:
+                raise SmokeCheckError("Dashboard must render exactly one source badge")
             visible_source_badge = source_badge.first
             try:
                 visible_source_badge.wait_for(state="visible", timeout=TIMEOUT_MS)

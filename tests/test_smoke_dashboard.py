@@ -185,8 +185,8 @@ def test_browser_smoke_rejects_missing_source_badge() -> None:
 
 
 @pytest.mark.integration
-def test_browser_smoke_accepts_multiple_visible_source_badges() -> None:
-    """Repeated responsive badges must not trigger Playwright strict-mode failures."""
+def test_browser_smoke_rejects_duplicate_source_badges() -> None:
+    """The rendered source indicator must have one unambiguous owner."""
     module = _load_smoke_module()
     page = _Page(
         source_badge=[
@@ -195,7 +195,8 @@ def test_browser_smoke_accepts_multiple_visible_source_badges() -> None:
         ]
     )
 
-    _run(module, page)
+    with pytest.raises(module.SmokeCheckError, match="exactly one source badge"):
+        _run(module, page)
 
 
 @pytest.mark.integration

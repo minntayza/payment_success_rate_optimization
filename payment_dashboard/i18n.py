@@ -20,16 +20,16 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "payment failures from one local dashboard."
         ),
         "dashboard.disclaimer": (
-            "Academic demo · Gateway labels are randomly simulated and do not "
-            "represent real bank or gateway performance."
+            "Academic demo · Gateway assignments and payment outcomes are "
+            "controlled synthetic data, not real bank or gateway performance."
         ),
         "sidebar.controls": "Dashboard controls",
         "sidebar.replay_description": (
-            "Replay transactions chronologically, then narrow the visible analysis."
+            "Browse chronological history, then narrow the visible analysis."
         ),
-        "sidebar.replayed_transactions": "Replayed transactions",
+        "sidebar.replayed_transactions": "History transactions",
         "sidebar.replay_help": (
-            "Controls how many chronological transactions have arrived."
+            "Controls the historical sample used by the legacy CSV view."
         ),
         "sidebar.replay_count": "{replay_count:,} of {total_count:,} transactions",
         "sidebar.display_filters": "Display filters",
@@ -44,7 +44,7 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "sidebar.date_range": "Date range",
         "sidebar.filter_note": (
             "Filters change the charts and KPIs. Alert calculations always use "
-            "the unfiltered replay stream."
+            "the full active transaction history."
         ),
         "kpi.transactions": "Transactions",
         "kpi.success_rate": "Success rate",
@@ -89,6 +89,10 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         ),
         "source.live_label": "Live MongoDB data",
         "source.demo_label": "Simulated demo data",
+        "source.simulation_disclosure": (
+            "Simulation {version}: gateway assignments and dashboard outcomes "
+            "are synthetic and controlled for this academic demo."
+        ),
         "source.degraded_warning": (
             "MongoDB is unavailable. Simulated demo data is active; editing is "
             "disabled."
@@ -147,10 +151,11 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "guide.content": (
             "- **Baseline** is each gateway's success rate across the complete "
             "dataset.\n"
-            "- **Latest 50** is the gateway's success rate in its newest 50 replayed "
+            "- **Latest 50** is the gateway's success rate in its newest 50 active "
             "transactions.\n"
             "- **Drop** is baseline minus latest-50 performance.\n"
-            "- Gateway assignment is random, so comparisons are for demonstration only."
+            "- Gateway assignment and outcomes are controlled synthetic values, so "
+            "comparisons are for demonstration only."
         ),
         "errors.no_matching_transactions": (
             "No transactions match the selected filters. Clear one or more "
@@ -201,15 +206,16 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "ပျက်ကွက်မှုများကို dashboard တစ်ခုတည်းမှ စစ်ဆေးပါ။"
         ),
         "dashboard.disclaimer": (
-            "ပညာရေးသရုပ်ပြ · Gateway အမည်များကို ကျပန်းဖန်တီးထားပြီး အမှန်တကယ် "
-            "ဘဏ် သို့မဟုတ် gateway စွမ်းဆောင်ရည်ကို ကိုယ်စားမပြုပါ။"
+            "ပညာရေးသရုပ်ပြ · Gateway သတ်မှတ်မှုများနှင့် ငွေပေးချေမှုရလဒ်များသည် "
+            "ထိန်းချုပ်ဖန်တီးထားသော အတုဒေတာများဖြစ်ပြီး အမှန်တကယ် ဘဏ် သို့မဟုတ် "
+            "gateway စွမ်းဆောင်ရည်ကို ကိုယ်စားမပြုပါ။"
         ),
         "sidebar.controls": "Dashboard ထိန်းချုပ်မှုများ",
         "sidebar.replay_description": (
-            "ငွေပေးချေမှုများကို အချိန်စဉ်အတိုင်း ပြန်ဖွင့်ပြီး မြင်ကွင်းခွဲခြမ်းမှုကို စစ်ထုတ်ပါ။"
+            "ငွေပေးချေမှုမှတ်တမ်းကို အချိန်စဉ်အတိုင်း ကြည့်ရှုပြီး မြင်ကွင်းခွဲခြမ်းမှုကို စစ်ထုတ်ပါ။"
         ),
-        "sidebar.replayed_transactions": "ပြန်ဖွင့်ထားသော ငွေပေးချေမှုများ",
-        "sidebar.replay_help": "အချိန်စဉ် ငွေပေးချေမှု မည်မျှ ရောက်ရှိပြီးပြီကို ထိန်းချုပ်သည်။",
+        "sidebar.replayed_transactions": "မှတ်တမ်းရှိ ငွေပေးချေမှုများ",
+        "sidebar.replay_help": "CSV မြင်ကွင်းဟောင်းတွင် အသုံးပြုမည့် မှတ်တမ်းနမူနာကို ထိန်းချုပ်သည်။",
         "sidebar.replay_count": "ငွေပေးချေမှု {total_count:,} ခုအနက် {replay_count:,} ခု",
         "sidebar.display_filters": "ပြသမှု စစ်ထုတ်မှုများ",
         "sidebar.gateway": "Gateway",
@@ -223,7 +229,7 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "sidebar.date_range": "ရက်စွဲအပိုင်းအခြား",
         "sidebar.filter_note": (
             "စစ်ထုတ်မှုများသည် ဇယားများနှင့် KPI များကို ပြောင်းလဲသည်။ သတိပေးချက် "
-            "တွက်ချက်မှုများသည် စစ်မထုတ်ထားသော replay stream ကို အမြဲအသုံးပြုသည်။"
+            "တွက်ချက်မှုများသည် အသုံးပြုနေသော ငွေပေးချေမှုမှတ်တမ်း အပြည့်အစုံကို အမြဲအသုံးပြုသည်။"
         ),
         "kpi.transactions": "ငွေပေးချေမှုများ",
         "kpi.success_rate": "အောင်မြင်နှုန်း",
@@ -263,6 +269,10 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         ),
         "source.live_label": "MongoDB မှ တိုက်ရိုက်ဒေတာ",
         "source.demo_label": "သရုပ်ပြဖန်တီးထားသော ဒေတာ",
+        "source.simulation_disclosure": (
+            "Simulation {version}: Gateway သတ်မှတ်မှုများနှင့် dashboard ရလဒ်များသည် "
+            "ဤပညာရေးသရုပ်ပြအတွက် ထိန်းချုပ်ဖန်တီးထားသော အတုဒေတာများဖြစ်သည်။"
+        ),
         "source.degraded_warning": (
             "MongoDB ကို အသုံးမပြုနိုင်ပါ။ သရုပ်ပြဖန်တီးထားသော ဒေတာကို အသုံးပြုနေပြီး "
             "ပြင်ဆင်မှုများကို ပိတ်ထားသည်။"
@@ -316,10 +326,11 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "guide.title": "ဤ dashboard ကို နားလည်ရန်",
         "guide.content": (
             "- **အခြေခံနှုန်း** သည် dataset တစ်ခုလုံးရှိ gateway တစ်ခုစီ၏ အောင်မြင်နှုန်းဖြစ်သည်။\n"
-            "- **နောက်ဆုံး ၅၀** သည် replay လုပ်ထားသော နောက်ဆုံး ငွေပေးချေမှု ၅၀ ခု၏ "
+            "- **နောက်ဆုံး ၅၀** သည် အသုံးပြုနေသော မှတ်တမ်းထဲမှ နောက်ဆုံး ငွေပေးချေမှု ၅၀ ခု၏ "
             "အောင်မြင်နှုန်းဖြစ်သည်။\n"
             "- **လျော့ကျမှု** သည် အခြေခံနှုန်းမှ နောက်ဆုံး ၅၀ ၏ စွမ်းဆောင်ရည်ကို နုတ်ထားခြင်းဖြစ်သည်။\n"
-            "- Gateway ခန့်အပ်မှုသည် ကျပန်းဖြစ်သောကြောင့် နှိုင်းယှဉ်မှုများသည် သရုပ်ပြရန်သာဖြစ်သည်။"
+            "- Gateway သတ်မှတ်မှုနှင့် ရလဒ်များကို ထိန်းချုပ်ဖန်တီးထားသောကြောင့် "
+            "နှိုင်းယှဉ်မှုများသည် သရုပ်ပြရန်သာဖြစ်သည်။"
         ),
         "errors.no_matching_transactions": (
             "ရွေးချယ်ထားသော စစ်ထုတ်မှုများနှင့် ကိုက်ညီသော ငွေပေးချေမှုမရှိပါ။ ဆက်လက်ရန် "

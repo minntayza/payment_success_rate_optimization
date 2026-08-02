@@ -7,10 +7,14 @@ from payment_dashboard.simulation import simulate_transactions
 class Collection:
     def __init__(self):
         self.operations = []
+        self.updates = []
 
     def bulk_write(self, operations, ordered):
         assert ordered is False
         self.operations.extend(operations)
+
+    def update_many(self, query, update):
+        self.updates.append((query, update))
 
 
 class Database(dict):
@@ -41,3 +45,6 @@ def test_import_uses_batched_upserts(
     assert count == 3
     assert len(database.collection.operations) == 3
     assert all(operation._upsert for operation in database.collection.operations)
+    assert database.collection.updates == [
+        ({"is_deleted": {"$exists": False}}, {"$set": {"is_deleted": False}})
+    ]

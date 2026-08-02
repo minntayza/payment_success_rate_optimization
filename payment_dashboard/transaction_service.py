@@ -9,7 +9,8 @@ import pandas as pd
 
 from payment_dashboard.config import GATEWAYS, STATUSES
 from payment_dashboard.mongodb import COLUMN_MAP
-from payment_dashboard.simulation import SIMULATION_VERSION
+
+MANUAL_SIMULATION_VERSION = "manual-v1"
 
 
 class TransactionValidationError(ValueError):
@@ -120,7 +121,7 @@ def create_transaction(
     payload.update(
         {
             "source_transaction_status": payload["transaction_status"],
-            "simulation_version": SIMULATION_VERSION,
+            "simulation_version": MANUAL_SIMULATION_VERSION,
             "is_deleted": False,
             "created_at": now,
             "updated_at": now,
@@ -145,10 +146,18 @@ def update_transaction(
 ) -> None:
     payload = validate_transaction(values)
     payload.pop("transaction_id", None)
-    payload.update({"updated_at": datetime.now(UTC), "updated_by": actor})
+    payload.pop("source_transaction_status", None)
+    payload.pop("simulation_version", None)
+    payload.update(
+        {
+            "simulation_version": MANUAL_SIMULATION_VERSION,
+            "updated_at": datetime.now(UTC),
+            "updated_by": actor,
+        }
+    )
     try:
         collection = database["transactions"]
-        query = {"transaction_id": transaction_id, "is_deleted": {"$ne": True}}
+        query = {"transaction_id": transaction_id, "is_deleted": False}
         old_document = collection.find_one(query)
         result = collection.update_one(query, {"$set": payload})
         if not result.matched_count:
@@ -180,7 +189,7 @@ def soft_delete_transaction(
     }
     try:
         collection = database["transactions"]
-        query = {"transaction_id": transaction_id, "is_deleted": {"$ne": True}}
+        query = {"transaction_id": transaction_id, "is_deleted": False}
         old_document = collection.find_one(query)
         result = collection.update_one(query, {"$set": changes})
         if not result.matched_count:

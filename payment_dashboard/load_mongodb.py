@@ -42,9 +42,13 @@ def import_transactions(path: Path, database: Any, batch_size: int = 200) -> int
     """Validate and deterministically upsert the prepared CSV."""
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
+    collection = database["transactions"]
+    collection.update_many(
+        {"is_deleted": {"$exists": False}},
+        {"$set": {"is_deleted": False}},
+    )
     ensure_indexes(database)
     documents = frame_to_documents(load_transactions(path, require_gateway=True))
-    collection = database["transactions"]
     now = datetime.now(UTC)
     for start in range(0, len(documents), batch_size):
         operations = []
