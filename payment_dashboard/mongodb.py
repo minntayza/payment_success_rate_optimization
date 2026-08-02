@@ -13,6 +13,7 @@ import pandas as pd
 from payment_dashboard.data_loader import validate_transactions
 
 LOGGER = logging.getLogger(__name__)
+LEGACY_SIMULATION_VERSION = "legacy-v0"
 
 COLUMN_MAP = {
     "transaction_id": "Transaction ID",
@@ -81,6 +82,18 @@ def ensure_indexes(database: Any) -> None:
 def documents_to_frame(documents: list[dict[str, object]]) -> pd.DataFrame:
     """Convert MongoDB documents to the established dashboard schema."""
     frame = pd.DataFrame(documents)
+    if "source_transaction_status" not in frame:
+        frame["source_transaction_status"] = frame["transaction_status"]
+    else:
+        frame["source_transaction_status"] = frame["source_transaction_status"].fillna(
+            frame["transaction_status"]
+        )
+    if "simulation_version" not in frame:
+        frame["simulation_version"] = LEGACY_SIMULATION_VERSION
+    else:
+        frame["simulation_version"] = frame["simulation_version"].fillna(
+            LEGACY_SIMULATION_VERSION
+        )
     frame = frame[list(COLUMN_MAP)].rename(columns=COLUMN_MAP)
     frame["PIN Code"] = frame["PIN Code"].astype("string")
     validate_transactions(frame, require_gateway=True)
