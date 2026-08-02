@@ -27,6 +27,17 @@ PLAYFUL_KEYS = {
     "ai.invalid_response",
     "database.fallback_not_configured",
     "database.fallback_unavailable",
+    "source.live_label",
+    "source.demo_label",
+    "source.degraded_warning",
+    "source.diagnostics",
+    "source.diagnostic_category",
+    "source.retry_guidance",
+    "source.retry",
+    "pagination.page",
+    "pagination.previous",
+    "pagination.next",
+    "pagination.summary",
 }
 
 
@@ -63,6 +74,13 @@ def test_load_error_and_recovery_guidance_are_translated() -> None:
         "`python -m payment_dashboard.prepare_data` ဖြင့် ပြင်ဆင်ထားသော dataset ကို "
         "ဖန်တီးပြီး ဤစာမျက်နှာကို ပြန်လည်ဖွင့်ပါ။"
     )
+
+
+def test_degraded_warning_and_retry_are_bilingual() -> None:
+    assert "Simulated demo data is active" in translate("source.degraded_warning")
+    assert "သရုပ်ပြဖန်တီးထားသော ဒေတာ" in translate("source.degraded_warning", "my")
+    assert translate("source.retry") == "Retry MongoDB"
+    assert translate("source.retry", "my") == "MongoDB ကို ထပ်မံကြိုးစားရန်"
 
 
 def test_burmese_gateway_success_chart_label_matches_the_ui_contract() -> None:

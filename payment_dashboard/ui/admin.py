@@ -11,6 +11,7 @@ import streamlit as st
 from payment_dashboard.admin_auth import hash_fingerprint, verify_password
 from payment_dashboard.config import GATEWAYS
 from payment_dashboard.i18n import Language, translate
+from payment_dashboard.models import DataSource
 from payment_dashboard.transaction_service import (
     DEVICES,
     TRANSACTION_TYPES,
@@ -225,13 +226,14 @@ def _render_manager(database: Any, frame: pd.DataFrame, language: Language) -> b
 
 def render_admin_panel(
     database: Any | None,
-    database_source: str,
+    database_source: str | DataSource,
     frame: pd.DataFrame,
     language: Language,
     password_hash: str | None = None,
 ) -> bool:
     """Render authenticated CRUD controls and return whether data changed."""
-    if database_source != "mongodb" or database is None or not password_hash:
+    live_source = database_source in ("mongodb", DataSource.LIVE)
+    if not live_source or database is None or not password_hash:
         st.info(translate("admin.fallback_disabled", language))
         return False
     with st.expander(translate("admin.title", language)):

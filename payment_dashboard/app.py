@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import os
 import sys
 import types
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -29,6 +31,7 @@ FILTER_WIDGET_KEYS = (
     "status_filter",
     "date_filter",
 )
+TRANSACTION_PAGE_SIZE = 50
 
 
 def _load(name: str):  # noqa: ANN001
@@ -72,18 +75,35 @@ import streamlit as st  # noqa: E402
 
 from payment_dashboard.alerting import evaluate_alerts  # noqa: E402
 from payment_dashboard.analytics import add_latency_band, apply_filters  # noqa: E402
-from payment_dashboard.config import DEFAULT_DATA_PATH  # noqa: E402
+from payment_dashboard.config import DEFAULT_DATA_PATH, GATEWAYS  # noqa: E402
+from payment_dashboard.dashboard_repository import (  # noqa: E402
+    DashboardFilters,
+    PageRequest,
+    PandasDashboardRepository,
+)
 from payment_dashboard.data_loader import (  # noqa: E402
     DataValidationError,
     load_transactions,
 )
 from payment_dashboard.demo_data import generate_demo_transactions  # noqa: E402
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate  # noqa: E402
-from payment_dashboard.models import DashboardState  # noqa: E402
+from payment_dashboard.models import (  # noqa: E402
+    DashboardSnapshot,
+    DashboardState,
+    DataSource,
+)
 from payment_dashboard.mongodb import (  # noqa: E402
     DatabaseResult,
+    MongoDashboardRepository,
+    MongoResources,
+    classify_mongodb_error,
     create_resources_from_env,
+    ensure_indexes,
     load_dashboard_transactions,
+)
+from payment_dashboard.transaction_service import (  # noqa: E402
+    DEVICES,
+    TRANSACTION_TYPES,
 )
 from payment_dashboard.ui.admin import render_admin_panel  # noqa: E402
 from payment_dashboard.ui.sections import (  # noqa: E402
@@ -161,6 +181,106 @@ def _load_data(language: Language = DEFAULT_LANGUAGE) -> DatabaseResult:
     return load_dashboard_transactions(fallback)
 
 
+def _load_demo_frame(language: Language = DEFAULT_LANGUAGE) -> pd.DataFrame:
+    """Load validated local data, generating the configured offline demo if needed."""
+    data_path = Path(os.getenv("PAYMENT_DATA_PATH", str(DEFAULT_DATA_PATH)))
+    if os.getenv("PAYMENT_DEMO_MODE") == "1" and not data_path.is_file():
+        return generate_demo_transactions()
+    try:
+        return load_transactions(data_path, require_gateway=True)
+    except DataValidationError as exc:
+        st.error(translate("errors.load_data", language, exc=exc))
+        st.info(translate("errors.prepare_data_guidance", language))
+        st.stop()
+
+
+@st.cache_resource(show_spinner=False)
+def _mongo_resources(
+    configuration_fingerprint: str,
+) -> MongoResources | None:
+    """Return MongoDB resources cached without retaining the raw connection URI."""
+    del configuration_fingerprint
+    return create_resources_from_env()
+
+
+def _mongo_configuration_fingerprint() -> str:
+    """Build a non-secret cache key that changes with MongoDB configuration."""
+    uri = os.getenv("MONGODB_URI", "")
+    database_name = os.getenv("MONGODB_DATABASE", "")
+    digest = hashlib.sha256(uri.encode()).hexdigest() if uri else "unconfigured"
+    return f"{digest}:{database_name}"
+
+
+def _load_snapshot(
+    filters: DashboardFilters,
+    page: PageRequest,
+    language: Language = DEFAULT_LANGUAGE,
+) -> DashboardSnapshot:
+    """Fetch one live dashboard snapshot or a clearly categorized demo fallback."""
+
+    def demo_snapshot(diagnostic: str) -> DashboardSnapshot:
+        snapshot = PandasDashboardRepository(_load_demo_frame(language)).fetch(
+            filters,
+            page,
+        )
+        return replace(snapshot, diagnostic=diagnostic)
+
+    try:
+        resources = _mongo_resources(_mongo_configuration_fingerprint())
+        if resources is None:
+            return demo_snapshot("configuration")
+        ensure_indexes(resources.database)
+        return MongoDashboardRepository(resources.database).fetch(filters, page)
+    except Exception as exc:
+        diagnostic = classify_mongodb_error(exc)
+        if diagnostic == "unexpected":
+            raise
+        return demo_snapshot(diagnostic)
+
+
+def _retry_database() -> None:
+    """Discard cached connection/query state before rerunning the dashboard."""
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.rerun()
+
+
+def _render_source_badge(snapshot: DashboardSnapshot, language: Language) -> None:
+    """Render a compact localized badge without exposing connection details."""
+    label_key = (
+        "source.live_label"
+        if snapshot.source is DataSource.LIVE
+        else "source.demo_label"
+    )
+    st.markdown(
+        '<div class="source-status">'
+        f'<span class="status-pill">{snapshot.source.value.upper()}</span> '
+        f"{translate(label_key, language)}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_source_status(
+    snapshot: DashboardSnapshot,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
+    """Render explicit live/degraded state with safe recovery guidance."""
+    _render_source_badge(snapshot, language)
+    if snapshot.source is DataSource.LIVE:
+        return
+    st.warning(translate("source.degraded_warning", language))
+    with st.expander(translate("source.diagnostics", language)):
+        category = snapshot.diagnostic or "unavailable"
+        st.write(translate("source.diagnostic_category", language, category=category))
+        st.caption(translate("source.retry_guidance", language))
+    st.button(
+        translate("source.retry", language),
+        key="database_retry",
+        on_click=_retry_database,
+    )
+
+
 def _apply_streamlit_secrets() -> None:
     """Expose approved root-level Streamlit secrets to existing clients."""
     for key in CLOUD_SETTING_KEYS:
@@ -188,6 +308,26 @@ def _reset_display_filters() -> None:
     """Clear display filters without changing replay or application state."""
     for key in FILTER_WIDGET_KEYS:
         st.session_state.pop(key, None)
+
+
+def _reset_transaction_page() -> None:
+    """Return to the first bounded page after a repository filter changes."""
+    st.session_state["transaction_page"] = 1
+
+
+def _reset_repository_filters() -> None:
+    """Clear repository filters and return pagination to its first page."""
+    _reset_display_filters()
+    _reset_transaction_page()
+
+
+def _change_transaction_page(delta: int, total_pages: int) -> None:
+    """Move pagination within the known valid page range."""
+    current = int(st.session_state.get("transaction_page", 1))
+    st.session_state["transaction_page"] = min(
+        total_pages,
+        max(1, current + delta),
+    )
 
 
 def _render_sidebar(
@@ -271,6 +411,65 @@ def _render_sidebar(
     return replay_count, gateways, transaction_types, devices, statuses, start, end
 
 
+def _render_repository_filters(
+    language: Language = DEFAULT_LANGUAGE,
+) -> DashboardFilters:
+    """Render repository-backed filters without loading the transaction collection."""
+    st.sidebar.header(translate("sidebar.controls", language))
+    gateways = st.sidebar.multiselect(
+        translate("sidebar.gateway", language),
+        sorted(GATEWAYS),
+        placeholder=translate("sidebar.all_gateways", language),
+        key="gateway_filter",
+        on_change=_reset_transaction_page,
+    )
+    transaction_types = st.sidebar.multiselect(
+        translate("sidebar.transaction_type", language),
+        sorted(TRANSACTION_TYPES),
+        placeholder=translate("sidebar.all_transaction_types", language),
+        key="transaction_type_filter",
+        on_change=_reset_transaction_page,
+    )
+    devices = st.sidebar.multiselect(
+        translate("sidebar.device", language),
+        sorted(DEVICES),
+        placeholder=translate("sidebar.all_devices", language),
+        key="device_filter",
+        on_change=_reset_transaction_page,
+    )
+    statuses = st.sidebar.multiselect(
+        translate("sidebar.status", language),
+        ["Success", "Failed"],
+        placeholder=translate("sidebar.all_statuses", language),
+        key="status_filter",
+        on_change=_reset_transaction_page,
+    )
+    selected_dates = st.sidebar.date_input(
+        translate("sidebar.date_range", language),
+        value=(),
+        key="date_filter",
+        on_change=_reset_transaction_page,
+    )
+    start, end = (
+        selected_dates
+        if isinstance(selected_dates, tuple) and len(selected_dates) == 2
+        else (None, None)
+    )
+    st.sidebar.button(
+        translate("actions.reset_filters", language),
+        type="secondary",
+        on_click=_reset_repository_filters,
+    )
+    return DashboardFilters(
+        gateways=tuple(gateways),
+        transaction_types=tuple(transaction_types),
+        devices=tuple(devices),
+        statuses=tuple(statuses),
+        start=start,
+        end=end,
+    )
+
+
 def render_app() -> None:
     """Main Streamlit application."""
     configured_language: Language = (
@@ -290,51 +489,89 @@ def render_app() -> None:
     st.markdown(translate("dashboard.description", language))
     st.caption(translate("dashboard.disclaimer", language))
 
-    database_result = _load_data(language)
-    full_frame = database_result.frame
-    if database_result.message:
-        st.info(translate(database_result.message, language))
-    resources = (
-        create_resources_from_env() if database_result.source == "mongodb" else None
+    filters = _render_repository_filters(language)
+    page_number = int(
+        st.number_input(
+            translate("pagination.page", language),
+            min_value=1,
+            value=1,
+            step=1,
+            key="transaction_page",
+            disabled=True,
+        )
     )
-    admin_database = resources.database if resources is not None else None
-    replay_count, gateways, transaction_types, devices, statuses, start, end = (
-        _render_sidebar(full_frame, language=language)
+    snapshot = _load_snapshot(
+        filters,
+        PageRequest(number=page_number, size=TRANSACTION_PAGE_SIZE),
+        language,
+    )
+    _render_source_status(snapshot, language)
+
+    total_pages = max(
+        1,
+        (snapshot.total_transactions + TRANSACTION_PAGE_SIZE - 1)
+        // TRANSACTION_PAGE_SIZE,
     )
 
-    state = build_dashboard_state(
-        full_frame,
-        replay_count,
-        gateways,
-        transaction_types,
-        devices,
-        statuses,
-        start,
-        end,
+    render_story_hero(snapshot, snapshot.source.value, language)
+    _render_source_badge(snapshot, language)
+    render_kpis(snapshot, language)
+    render_gateway_health(snapshot.alerts, language)
+
+    page_state = DashboardState(
+        replay_frame=snapshot.transactions,
+        display_frame=snapshot.transactions,
+        alerts=snapshot.alerts,
     )
-
-    render_story_hero(state, database_result.source, language)
-    render_kpis(state, language)
-    render_gateway_health(state.alerts, language)
-
-    if state.display_frame.empty:
+    if snapshot.total_transactions == 0:
         render_empty_state(language)
     else:
-        render_gateway_performance(state.display_frame, language)
+        render_gateway_performance(snapshot, language)
         trend_column, failure_column = st.columns(2)
         with trend_column:
-            render_success_trend(state.display_frame, language)
+            render_success_trend(snapshot, language)
         with failure_column:
-            render_failure_analysis(state.display_frame, language)
-        render_ai_operations_brief(state, language)
-        render_recent_transactions(state.display_frame, language)
+            render_failure_analysis(snapshot, language)
+        render_ai_operations_brief(page_state, language)
+        render_recent_transactions(snapshot.transactions, language, limit=None)
         render_interpretation_guide(language)
 
+    previous_column, next_column = st.columns(2)
+    previous_column.button(
+        translate("pagination.previous", language),
+        key="transaction_previous",
+        disabled=page_number <= 1,
+        on_click=_change_transaction_page,
+        args=(-1, total_pages),
+    )
+    next_column.button(
+        translate("pagination.next", language),
+        key="transaction_next",
+        disabled=page_number >= total_pages,
+        on_click=_change_transaction_page,
+        args=(1, total_pages),
+    )
+    st.caption(
+        translate(
+            "pagination.summary",
+            language,
+            page=page_number,
+            pages=total_pages,
+            total=snapshot.total_transactions,
+        )
+    )
+
+    resources = (
+        _mongo_resources(_mongo_configuration_fingerprint())
+        if snapshot.source is DataSource.LIVE
+        else None
+    )
+    admin_database = resources.database if resources is not None else None
     with st.container(border=True):
         if render_admin_panel(
             admin_database,
-            database_result.source,
-            full_frame,
+            snapshot.source,
+            snapshot.transactions,
             language,
             os.getenv("ADMIN_PASSWORD_HASH"),
         ):

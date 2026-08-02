@@ -52,7 +52,6 @@ def test_language_toggle_preserves_filters_and_translates_reset(
     assert app.sidebar.button[0].label == "Reset filters"
     assert not app.exception
 
-    app.sidebar.slider[0].set_value(120)
     app.sidebar.multiselect[0].set_value(["Gateway A"])
     app.sidebar.multiselect[1].set_value(["Transfer"])
     app.sidebar.multiselect[2].set_value(["Mobile"])
@@ -60,7 +59,7 @@ def test_language_toggle_preserves_filters_and_translates_reset(
     app.sidebar.date_input[0].set_value((date(2025, 6, 2), date(2025, 6, 3)))
     app.run(timeout=10)
 
-    assert app.sidebar.slider[0].value == 120
+    assert app.number_input(key="transaction_page").value == 1
 
     app.toggle[0].set_value(True).run(timeout=10)
 
@@ -70,7 +69,7 @@ def test_language_toggle_preserves_filters_and_translates_reset(
     assert app.sidebar.button[0].label == "စစ်ထုတ်မှုများ ပြန်လည်သတ်မှတ်ရန်"
     assert not app.exception
     assert app.sidebar.multiselect[0].options == english_gateway_options
-    assert app.sidebar.slider[0].value == 120
+    assert app.number_input(key="transaction_page").value == 1
     assert app.sidebar.multiselect[0].value == ["Gateway A"]
     assert app.sidebar.multiselect[1].value == ["Transfer"]
     assert app.sidebar.multiselect[2].value == ["Mobile"]
@@ -86,8 +85,7 @@ def test_reset_filters_button_restores_widget_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    app, minimum_date, maximum_date = _run_prepared_app(tmp_path, monkeypatch)
-    app.sidebar.slider[0].set_value(120)
+    app, _, _ = _run_prepared_app(tmp_path, monkeypatch)
     app.sidebar.multiselect[0].set_value(["Gateway A"])
     app.sidebar.multiselect[1].set_value(["Transfer"])
     app.sidebar.multiselect[2].set_value(["Mobile"])
@@ -97,9 +95,9 @@ def test_reset_filters_button_restores_widget_state(
 
     app.sidebar.button[0].click().run(timeout=10)
 
-    assert app.sidebar.slider[0].value == 120
+    assert app.number_input(key="transaction_page").value == 1
     assert [widget.value for widget in app.sidebar.multiselect] == [[], [], [], []]
-    assert app.sidebar.date_input[0].value == (minimum_date, maximum_date)
+    assert app.sidebar.date_input[0].value == ()
     assert not app.exception
 
 

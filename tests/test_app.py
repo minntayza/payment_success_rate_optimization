@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from contextlib import nullcontext
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -27,7 +28,12 @@ from payment_dashboard.app import (
     _render_sidebar,
     build_dashboard_state,
 )
-from payment_dashboard.models import DashboardState
+from payment_dashboard.dashboard_repository import (
+    DashboardFilters,
+    PageRequest,
+    PandasDashboardRepository,
+)
+from payment_dashboard.models import DashboardSnapshot, DashboardState, DataSource
 from payment_dashboard.ui.sections import (
     render_ai_operations_brief,
     render_gateway_health,
@@ -166,6 +172,51 @@ def test_streamlit_app_starts_without_exception():
 
 
 @pytest.mark.integration
+def test_degraded_mode_is_explicit_and_disables_editing(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MONGODB_URI", raising=False)
+    monkeypatch.delenv("MONGODB_DATABASE", raising=False)
+    monkeypatch.setenv("PAYMENT_DEMO_MODE", "1")
+    monkeypatch.setenv("PAYMENT_DATA_PATH", "/missing/dashboard-data.csv")
+    monkeypatch.setattr(app_module, "_apply_streamlit_secrets", lambda: None)
+
+    app = AppTest.from_file("streamlit_app.py").run(timeout=10)
+
+    assert not app.exception
+    assert any("DEMO" in item.value for item in app.markdown)
+    assert any("simulated demo data" in item.value.lower() for item in app.warning)
+    assert app.button(key="database_retry")
+    assert not app.tabs
+
+
+@pytest.mark.integration
+def test_transaction_page_changes_without_full_collection_load(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MONGODB_URI", raising=False)
+    monkeypatch.delenv("MONGODB_DATABASE", raising=False)
+    monkeypatch.setenv("PAYMENT_DEMO_MODE", "1")
+    monkeypatch.setenv("PAYMENT_DATA_PATH", "/missing/dashboard-data.csv")
+    monkeypatch.setattr(app_module, "_apply_streamlit_secrets", lambda: None)
+
+    app = AppTest.from_file("streamlit_app.py").run(timeout=10)
+
+    assert not app.exception
+    assert app.number_input(key="transaction_page").value == 1
+    first_page = app.dataframe[-1].value
+
+    app.button(key="transaction_next").click().run(timeout=10)
+
+    second_page = app.dataframe[-1].value
+    assert not app.exception
+    assert app.number_input(key="transaction_page").value == 2
+    assert len(first_page) == 50
+    assert len(second_page) == 50
+    assert set(first_page["Transaction ID"]).isdisjoint(second_page["Transaction ID"])
+
+
+@pytest.mark.integration
 def test_app_imports_as_installed_package():
     """Verify app.py works as an installed package (no sys.path hacks)."""
     result = subprocess.run(
@@ -203,6 +254,58 @@ def test_load_data_uses_demo_generator_when_enabled(
 
     assert loaded.source == "fallback"
     pd.testing.assert_frame_equal(loaded.frame, expected)
+
+
+def test_load_snapshot_uses_bounded_demo_repository_when_unconfigured(
+    monkeypatch: MonkeyPatch,
+    sample_transactions: pd.DataFrame,
+) -> None:
+    expected = dashboard_fixture(sample_transactions)
+    monkeypatch.setattr(app_module, "_mongo_resources", lambda *_: None)
+    monkeypatch.setattr(app_module, "_load_demo_frame", lambda _language: expected)
+
+    snapshot = app_module._load_snapshot(
+        DashboardFilters(),
+        PageRequest(number=2, size=50),
+    )
+
+    assert snapshot.source.value == "demo"
+    assert snapshot.diagnostic == "configuration"
+    assert snapshot.total_transactions == len(expected)
+    assert len(snapshot.transactions) == 50
+    assert snapshot.transactions.iloc[0]["Transaction ID"] == "TX189"
+
+
+def test_load_snapshot_does_not_hide_unexpected_errors(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    resources = app_module.MongoResources(object(), object())
+    monkeypatch.setattr(app_module, "_mongo_resources", lambda *_: resources)
+    monkeypatch.setattr(
+        app_module,
+        "ensure_indexes",
+        MagicMock(side_effect=RuntimeError("programming defect")),
+    )
+
+    with pytest.raises(RuntimeError, match="programming defect"):
+        app_module._load_snapshot(DashboardFilters(), PageRequest())
+
+
+def test_database_retry_clears_both_streamlit_caches_and_reruns(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    data_cache = MagicMock()
+    resource_cache = MagicMock()
+    rerun = MagicMock()
+    monkeypatch.setattr(app_module.st, "cache_data", data_cache)
+    monkeypatch.setattr(app_module.st, "cache_resource", resource_cache)
+    monkeypatch.setattr(app_module.st, "rerun", rerun)
+
+    app_module._retry_database()
+
+    data_cache.clear.assert_called_once_with()
+    resource_cache.clear.assert_called_once_with()
+    rerun.assert_called_once_with()
 
 
 def test_streamlit_secrets_populate_known_environment_settings(
@@ -257,17 +360,28 @@ def dashboard_state(sample_transactions: pd.DataFrame) -> DashboardState:
 def _patch_render_app_shell(
     monkeypatch: MonkeyPatch,
     state: DashboardState,
-) -> tuple[list[dict[str, object]], MagicMock]:
+) -> tuple[list[dict[str, object]], MagicMock, DashboardSnapshot]:
     """Replace Streamlit and data-loading edges around the real composition."""
     containers: list[dict[str, object]] = []
     rerun = MagicMock()
 
+    class Column:
+        def __enter__(self) -> Column:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def button(self, *_args: object, **_kwargs: object) -> bool:
+            return False
+
     monkeypatch.setattr(app_module.st, "session_state", {})
     monkeypatch.setattr(app_module.st, "set_page_config", lambda **_: None)
     monkeypatch.setattr(app_module.st, "title", lambda *_: None)
-    monkeypatch.setattr(app_module.st, "markdown", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "markdown", lambda *_, **__: None)
     monkeypatch.setattr(app_module.st, "caption", lambda *_: None)
     monkeypatch.setattr(app_module.st, "info", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "number_input", lambda *_, **__: 1)
     monkeypatch.setattr(
         app_module.st,
         "container",
@@ -276,32 +390,30 @@ def _patch_render_app_shell(
     monkeypatch.setattr(
         app_module.st,
         "columns",
-        lambda count: [nullcontext() for _ in range(count)],
+        lambda count: [Column() for _ in range(count)],
     )
     monkeypatch.setattr(app_module.st, "rerun", rerun)
     monkeypatch.setattr(app_module, "_apply_streamlit_secrets", lambda: None)
     monkeypatch.setattr(app_module, "apply_page_style", lambda: None)
     monkeypatch.setattr(app_module, "_render_language_toggle", lambda: "my")
-    monkeypatch.setattr(
-        app_module,
-        "_load_data",
-        lambda language: app_module.DatabaseResult(state.replay_frame, "fallback"),
+    snapshot = PandasDashboardRepository(state.display_frame).fetch(
+        DashboardFilters(),
+        PageRequest(),
     )
     monkeypatch.setattr(
         app_module,
-        "_render_sidebar",
-        lambda *_args, **_kwargs: (
-            len(state.replay_frame),
-            [],
-            [],
-            [],
-            [],
-            None,
-            None,
-        ),
+        "_load_snapshot",
+        lambda *_args, **_kwargs: snapshot,
     )
-    monkeypatch.setattr(app_module, "build_dashboard_state", lambda *_args: state)
-    return containers, rerun
+    monkeypatch.setattr(
+        app_module,
+        "_render_repository_filters",
+        lambda *_args, **_kwargs: DashboardFilters(),
+    )
+    monkeypatch.setattr(app_module, "_render_source_status", lambda *_args: None)
+    monkeypatch.setattr(app_module, "_render_source_badge", lambda *_args: None)
+    monkeypatch.setattr(app_module, "_mongo_resources", lambda *_args: None)
+    return containers, rerun, snapshot
 
 
 def _track_renderers(
@@ -337,20 +449,20 @@ def test_story_first_composition_and_admin_rerun(
     ]
     calls: list[str] = []
     admin_snapshots: list[list[str]] = []
-    containers, rerun = _patch_render_app_shell(monkeypatch, dashboard_state)
+    containers, rerun, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
 
     def render_hero(
-        state: DashboardState,
+        state: DashboardSnapshot,
         database_source: str,
         language: str,
     ) -> None:
-        assert state is dashboard_state
-        assert database_source == "fallback"
+        assert state is snapshot
+        assert database_source == "demo"
         assert language == "my"
         calls.append("hero")
 
     def render_ai(state: DashboardState, language: str) -> None:
-        assert state is dashboard_state
+        pd.testing.assert_frame_equal(state.display_frame, snapshot.transactions)
         assert language == "my"
         calls.append("ai")
 
@@ -397,7 +509,7 @@ def test_empty_state_skips_data_sections_but_keeps_admin_manager(
     )
     calls: list[str] = []
     admin_snapshots: list[list[str]] = []
-    containers, _ = _patch_render_app_shell(monkeypatch, empty_state)
+    containers, _, _ = _patch_render_app_shell(monkeypatch, empty_state)
 
     def render_admin(*_args: object, **_kwargs: object) -> bool:
         admin_snapshots.append(calls.copy())
@@ -431,35 +543,23 @@ def test_database_fallback_status_uses_selected_language(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
 ) -> None:
-    infos: list[str] = []
-    _patch_render_app_shell(monkeypatch, dashboard_state)
-    monkeypatch.setattr(
-        app_module,
-        "_load_data",
-        lambda language: app_module.DatabaseResult(
-            dashboard_state.replay_frame,
-            "fallback",
-            "database.fallback_unavailable",
-        ),
-    )
-    monkeypatch.setattr(app_module.st, "info", infos.append)
-    monkeypatch.setattr(app_module, "render_admin_panel", lambda *_args: False)
-    for name in (
-        "render_story_hero",
-        "render_kpis",
-        "render_gateway_health",
-        "render_gateway_performance",
-        "render_success_trend",
-        "render_failure_analysis",
-        "render_ai_operations_brief",
-        "render_recent_transactions",
-        "render_interpretation_guide",
-    ):
-        monkeypatch.setattr(app_module, name, lambda *_args, **_kwargs: None)
+    warnings: list[str] = []
+    render_source_status = app_module._render_source_status
+    _, _, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
+    degraded = replace(snapshot, diagnostic="connection")
+    monkeypatch.setattr(app_module, "_render_source_status", render_source_status)
+    monkeypatch.setattr(app_module.st, "warning", warnings.append)
+    monkeypatch.setattr(app_module.st, "markdown", lambda *_, **__: None)
+    monkeypatch.setattr(app_module.st, "expander", lambda *_: nullcontext())
+    monkeypatch.setattr(app_module.st, "write", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "caption", lambda *_: None)
+    monkeypatch.setattr(app_module.st, "button", lambda *_, **__: False)
 
-    app_module.render_app()
+    app_module._render_source_status(degraded, "my")
 
-    assert infos == ["ဒေတာဘေ့စ်ကို ယာယီ အသုံးမပြုနိုင်သဖြင့် သရုပ်ပြဒေတာကို ပြသထားသည်။"]
+    assert warnings == [
+        "MongoDB ကို အသုံးမပြုနိုင်ပါ။ သရုပ်ပြဖန်တီးထားသော ဒေတာကို အသုံးပြုနေပြီး ပြင်ဆင်မှုများကို ပိတ်ထားသည်။"
+    ]
 
 
 @pytest.mark.integration
@@ -573,6 +673,28 @@ def test_story_hero_renders_localized_semantic_wrapper(
             True,
         )
     ]
+
+
+@pytest.mark.integration
+def test_story_hero_uses_live_label_for_live_snapshot(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    rendered: list[str] = []
+    snapshot = PandasDashboardRepository(dashboard_state.display_frame).fetch(
+        DashboardFilters(),
+        PageRequest(),
+    )
+    live_snapshot = replace(snapshot, source=DataSource.LIVE)
+    monkeypatch.setattr(
+        sections_module.st,
+        "markdown",
+        lambda body, **_kwargs: rendered.append(body),
+    )
+
+    render_story_hero(live_snapshot, database_source="live", language="en")
+
+    assert "Live MongoDB data" in rendered[0]
 
 
 @pytest.mark.integration

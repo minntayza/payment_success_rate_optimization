@@ -82,6 +82,22 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "database.fallback_unavailable": (
             "The database is temporarily unavailable, so demo data is being shown."
         ),
+        "source.live_label": "Live MongoDB data",
+        "source.demo_label": "Simulated demo data",
+        "source.degraded_warning": (
+            "MongoDB is unavailable. Simulated demo data is active; editing is "
+            "disabled."
+        ),
+        "source.diagnostics": "Database status and recovery",
+        "source.diagnostic_category": "Diagnostic category: {category}",
+        "source.retry_guidance": (
+            "Check the MongoDB configuration or connection, then retry."
+        ),
+        "source.retry": "Retry MongoDB",
+        "pagination.page": "Transaction page",
+        "pagination.previous": "Previous page",
+        "pagination.next": "Next page",
+        "pagination.summary": "Page {page} of {pages} · {total:,} transactions",
         "health.title": "Gateway health",
         "health.description": (
             "An alert triggers when a gateway's latest 50 transactions fall at "
@@ -233,6 +249,20 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "database.fallback_unavailable": (
             "ဒေတာဘေ့စ်ကို ယာယီ အသုံးမပြုနိုင်သဖြင့် သရုပ်ပြဒေတာကို ပြသထားသည်။"
         ),
+        "source.live_label": "MongoDB မှ တိုက်ရိုက်ဒေတာ",
+        "source.demo_label": "သရုပ်ပြဖန်တီးထားသော ဒေတာ",
+        "source.degraded_warning": (
+            "MongoDB ကို အသုံးမပြုနိုင်ပါ။ သရုပ်ပြဖန်တီးထားသော ဒေတာကို အသုံးပြုနေပြီး "
+            "ပြင်ဆင်မှုများကို ပိတ်ထားသည်။"
+        ),
+        "source.diagnostics": "ဒေတာဘေ့စ် အခြေအနေနှင့် ပြန်လည်ရယူမှု",
+        "source.diagnostic_category": "စစ်ဆေးချက် အမျိုးအစား: {category}",
+        "source.retry_guidance": ("MongoDB သတ်မှတ်ချက် သို့မဟုတ် ချိတ်ဆက်မှုကို စစ်ဆေးပြီး ထပ်မံကြိုးစားပါ။"),
+        "source.retry": "MongoDB ကို ထပ်မံကြိုးစားရန်",
+        "pagination.page": "ငွေပေးချေမှု စာမျက်နှာ",
+        "pagination.previous": "ယခင်စာမျက်နှာ",
+        "pagination.next": "နောက်စာမျက်နှာ",
+        "pagination.summary": ("စာမျက်နှာ {page}/{pages} · ငွေပေးချေမှု {total:,} ခု"),
         "health.title": "Gateway အခြေအနေ",
         "health.description": (
             "Gateway တစ်ခု၏ နောက်ဆုံး ငွေပေးချေမှု ၅၀ ခုသည် dataset တစ်ခုလုံး၏ "

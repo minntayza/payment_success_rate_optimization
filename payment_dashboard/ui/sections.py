@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 from payment_dashboard.ai_brief import (
@@ -12,8 +13,9 @@ from payment_dashboard.ai_brief import (
     generate_brief,
 )
 from payment_dashboard.analytics import summary_metrics
+from payment_dashboard.config import CHART_COLORS
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
-from payment_dashboard.models import DashboardState
+from payment_dashboard.models import DashboardSnapshot, DashboardState, DataSource
 from payment_dashboard.ui.charts import (
     FAILURE_DIMENSIONS,
     failure_breakdown_chart,
@@ -81,15 +83,21 @@ def build_story_hero_html(
 
 
 def render_story_hero(
-    state: DashboardState,
+    state: DashboardState | DashboardSnapshot,
     database_source: str,
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render the localized success-first dashboard story."""
-    metrics = summary_metrics(state.display_frame)
+    metrics = (
+        dict(state.metrics)
+        if isinstance(state, DashboardSnapshot)
+        else summary_metrics(state.display_frame)
+    )
     successful = int(metrics["transaction_count"] - metrics["failed_count"])
     status_key = (
-        "hero.database_live" if database_source == "mongodb" else "hero.demo_mode"
+        "hero.database_live"
+        if database_source in ("mongodb", DataSource.LIVE.value)
+        else "hero.demo_mode"
     )
     st.markdown(
         build_story_hero_html(successful, metrics, status_key, language),
@@ -158,11 +166,15 @@ def render_ai_operations_brief(
 
 
 def render_kpis(
-    state: DashboardState,
+    state: DashboardState | DashboardSnapshot,
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render the top-level KPI metric cards."""
-    metrics = summary_metrics(state.display_frame)
+    metrics = (
+        dict(state.metrics)
+        if isinstance(state, DashboardSnapshot)
+        else summary_metrics(state.display_frame)
+    )
     active_alerts = int(state.alerts["is_alert"].sum())
 
     kpis = (
@@ -267,38 +279,86 @@ def render_gateway_health(
 
 
 def render_gateway_performance(
-    frame: pd.DataFrame,
+    frame: pd.DataFrame | DashboardSnapshot,
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render gateway success rate and volume charts side by side."""
     st.subheader(translate("charts.gateway_performance", language))
     left, right = st.columns(2)
-    left.plotly_chart(
-        gateway_success_chart(frame, language=language), use_container_width=True
-    )
-    right.plotly_chart(
-        gateway_volume_chart(frame, language=language), use_container_width=True
-    )
+    if isinstance(frame, DashboardSnapshot):
+        summary = frame.gateway_summary
+        success_chart = px.bar(
+            summary,
+            x="Bank Gateway",
+            y="success_rate",
+            color="Bank Gateway",
+            color_discrete_sequence=CHART_COLORS,
+            title=translate("charts.success_rate_by_gateway", language),
+            range_y=[0, 1],
+            text_auto=".1%",
+        )
+        success_chart.update_layout(showlegend=False, yaxis_tickformat=".0%")
+        volume_chart = px.bar(
+            summary,
+            x="Bank Gateway",
+            y="transaction_count",
+            color="Bank Gateway",
+            color_discrete_sequence=CHART_COLORS,
+            title=translate("charts.transaction_volume_by_gateway", language),
+            text_auto=True,
+        )
+        volume_chart.update_layout(showlegend=False)
+    else:
+        success_chart = gateway_success_chart(frame, language=language)
+        volume_chart = gateway_volume_chart(frame, language=language)
+    left.plotly_chart(success_chart, use_container_width=True)
+    right.plotly_chart(volume_chart, use_container_width=True)
 
 
 def render_success_trend(
-    frame: pd.DataFrame,
+    frame: pd.DataFrame | DashboardSnapshot,
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render the success rate trend line chart."""
     st.subheader(translate("charts.success_trend", language))
-    st.plotly_chart(
-        success_trend_chart(frame, language=language), use_container_width=True
-    )
+    if isinstance(frame, DashboardSnapshot):
+        chart = px.line(
+            frame.trend,
+            x="Timestamp",
+            y="success_rate",
+            markers=True,
+            color_discrete_sequence=["#2563EB"],
+            title=translate("charts.success_trend", language),
+        )
+        chart.update_layout(yaxis_tickformat=".0%", yaxis_range=[0, 1])
+    else:
+        chart = success_trend_chart(frame, language=language)
+    st.plotly_chart(chart, use_container_width=True)
 
 
 def render_failure_analysis(
-    frame: pd.DataFrame,
+    frame: pd.DataFrame | DashboardSnapshot,
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render failure breakdown charts by four dimensions."""
     st.subheader(translate("sections.failure_analysis", language))
     st.caption(translate("sections.failure_analysis_description", language))
+    if isinstance(frame, DashboardSnapshot):
+        chart = px.bar(
+            frame.failure_summary,
+            x="Latency Band",
+            y="failed_count",
+            title=translate(
+                "charts.failures_by",
+                language,
+                title=translate("dimensions.latency_band", language).lower(),
+            ),
+            color_discrete_sequence=["#F97316"],
+            text_auto=True,
+        )
+        chart.update_layout(showlegend=False)
+        st.plotly_chart(chart, width="stretch")
+        return
     columns = st.columns(2)
     for index, (dimension, title) in enumerate(FAILURE_DIMENSIONS):
         chart = failure_breakdown_chart(frame, dimension, title, language=language)
@@ -308,10 +368,14 @@ def render_failure_analysis(
 def render_recent_transactions(
     frame: pd.DataFrame,
     language: Language = DEFAULT_LANGUAGE,
+    limit: int | None = 25,
 ) -> None:
     """Render the recent transactions table."""
     st.subheader(translate("table.recent_transactions", language))
-    display = frame.sort_values("Timestamp", ascending=False).head(25)[RECENT_COLUMNS]
+    display = frame.sort_values("Timestamp", ascending=False)
+    if limit is not None:
+        display = display.head(limit)
+    display = display[RECENT_COLUMNS]
     display = display.rename(
         columns={
             column: translate(key, language)

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 
+from payment_dashboard.models import DataSource
 from payment_dashboard.ui import admin
 
 
@@ -13,6 +14,29 @@ def test_fallback_mode_disables_transaction_editing(monkeypatch) -> None:
     changed = admin.render_admin_panel(None, "fallback", pd.DataFrame(), "en")
     assert changed is False
     info.assert_called_once()
+
+
+def test_demo_snapshot_disables_editing_even_with_database_credentials(
+    monkeypatch,
+) -> None:
+    info = MagicMock()
+    manager = MagicMock(side_effect=AssertionError("demo mode opened mutations"))
+    monkeypatch.setattr(admin.st, "info", info)
+    monkeypatch.setattr(admin, "_render_manager", manager)
+
+    changed = admin.render_admin_panel(
+        object(),
+        DataSource.DEMO,
+        pd.DataFrame(),
+        "my",
+        "configured-hash",
+    )
+
+    assert changed is False
+    info.assert_called_once_with(
+        "Demo fallback data အသုံးပြုနေချိန် database ပြင်ဆင်မှု မရနိုင်ပါ။"
+    )
+    manager.assert_not_called()
 
 
 def test_row_values_preserve_pin_and_boolean(sample_transactions) -> None:
