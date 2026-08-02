@@ -103,6 +103,40 @@ The command:
 make test
 ```
 
+`make test` is offline by default. The Atlas and AI-provider checks are skipped
+unless explicitly enabled, so they never read credentials or make network calls
+in the normal suite.
+
+### Optional external verification
+
+After configuring Atlas and the AI provider in your shell, run the bounded live
+contracts explicitly:
+
+```bash
+RUN_ATLAS_TESTS=1 .venv/bin/pytest tests/test_live_atlas.py -q
+RUN_AI_TESTS=1 .venv/bin/pytest tests/test_live_ai.py -q
+# Or run both after configuring both services:
+make test-live
+```
+
+The AI contract uses a 10-second timeout and one provider attempt. It checks
+only that the provider returns a validated, aggregate-only brief. The dashboard
+normally falls back to a deterministic local brief if the provider is missing,
+unavailable, or returns invalid content.
+
+For a real browser smoke check, install Chromium once, start the dashboard, and
+pass its URL explicitly:
+
+```bash
+.venv/bin/python -m playwright install chromium
+ARROW_DEFAULT_MEMORY_POOL=system make run
+DASHBOARD_URL=http://localhost:8501 make smoke
+```
+
+The smoke check uses headless Chromium and fails on a load error, a missing
+visible source badge or core KPI labels, or a rendered Streamlit exception.
+It is intentionally separate from the default test suite.
+
 ## Start the web app
 
 ```bash
@@ -130,14 +164,16 @@ automatically. Stop the server with `Ctrl+C`.
    transactions.
 7. Use Failure Analysis to investigate patterns by fraud flag, latency band,
    device, and transaction type.
-8. Use Recent Transactions to inspect individual records.
+8. Use Recent Transactions to inspect individual records. The table is a
+   bounded server-side page; use the Previous and Next controls to navigate,
+   and changing repository filters returns to page 1.
 9. The administrator can expand **Administrator transaction manager**, enter the
    configured password, and create, edit, or soft-delete simulated records.
 
 The AI brief follows the active dashboard language, uses simulated gateway data,
 and is not real financial or routing advice. If configuration is missing or the
-provider is unavailable, the dashboard shows an actionable error without
-exposing the key.
+provider is unavailable, the dashboard uses a deterministic local fallback
+without exposing the key.
 
 Display filters do not change alert calculations. Alerts always use the
 unfiltered chronological replay stream.

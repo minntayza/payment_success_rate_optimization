@@ -2,7 +2,7 @@ PYTHON = .venv/bin/python
 PYTEST = $(PYTHON) -m pytest
 RUFF = .venv/bin/ruff
 
-.PHONY: help setup test test-unit test-integration lint format run prepare load-mongodb verify-clean clean
+.PHONY: help setup test test-unit test-integration test-live smoke lint format run prepare load-mongodb verify-clean clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -20,11 +20,18 @@ test-unit:  ## Run unit tests only
 test-integration:  ## Run integration tests only
 	$(PYTEST) -q -m integration
 
+test-live:  ## Run opt-in Atlas and AI provider contract checks
+	RUN_ATLAS_TESTS=1 RUN_AI_TESTS=1 $(PYTEST) -q tests/test_live_atlas.py tests/test_live_ai.py
+
+smoke:  ## Browser-smoke a running dashboard (set DASHBOARD_URL)
+	@test -n "$(DASHBOARD_URL)" || (echo "Set DASHBOARD_URL, e.g. http://localhost:8501" >&2; exit 2)
+	$(PYTHON) scripts/smoke_dashboard.py "$(DASHBOARD_URL)"
+
 lint:  ## Run ruff linter
-	$(RUFF) check payment_dashboard/ tests/
+	$(RUFF) check payment_dashboard/ tests/ scripts/
 
 format:  ## Auto-format code with ruff
-	$(RUFF) format payment_dashboard/ tests/
+	$(RUFF) format payment_dashboard/ tests/ scripts/
 
 run:  ## Start the Streamlit dashboard
 	$(PYTHON) -m streamlit run payment_dashboard/app.py

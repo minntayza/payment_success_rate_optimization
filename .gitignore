@@ -4,6 +4,12 @@
 .env
 __pycache__/
 .pytest_cache/
+build/
+dist/
+.streamlit/secrets.toml
+.agents/
+.codex-plugins/
+.superpowers/
 *.py[cod]
 *.egg-info/
 data/raw/*.csv
