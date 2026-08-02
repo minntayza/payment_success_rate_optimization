@@ -988,7 +988,7 @@ def test_ai_brief_passes_selected_language(
 
 
 @pytest.mark.integration
-def test_ai_brief_fingerprint_covers_language_model_filters_and_data_version(
+def test_ai_brief_fingerprint_normalizes_filters_and_covers_data_version(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
 ) -> None:
@@ -1010,25 +1010,37 @@ def test_ai_brief_fingerprint_covers_language_model_filters_and_data_version(
     monkeypatch.setattr(sections_module, "facts_fingerprint", capture_fingerprint)
     monkeypatch.setenv("ANTHROPIC_MODEL", "fingerprint-model")
     filters = DashboardFilters(
-        gateways=("Gateway A",),
-        statuses=("Failed",),
+        gateways=("Gateway B", "Gateway A", "Gateway B"),
+        statuses=("Success", "Failed", "Success"),
+        start=date(2025, 1, 1),
+        end=date(2025, 1, 31),
+    )
+    equivalent_filters = DashboardFilters(
+        gateways=("Gateway A", "Gateway B"),
+        statuses=("Failed", "Success"),
         start=date(2025, 1, 1),
         end=date(2025, 1, 31),
     )
 
     render_ai_operations_brief(snapshot, language="my", filters=filters)
+    render_ai_operations_brief(
+        snapshot,
+        language="my",
+        filters=equivalent_filters,
+    )
 
     payload = captured[0]
     assert payload["language"] == "my"
     assert payload["model"] == "fingerprint-model"
     assert payload["filters"] == {
-        "gateways": ("Gateway A",),
+        "gateways": ("Gateway A", "Gateway B"),
         "transaction_types": (),
         "devices": (),
-        "statuses": ("Failed",),
+        "statuses": ("Failed", "Success"),
         "start": "2025-01-01",
         "end": "2025-01-31",
     }
+    assert captured[1]["filters"] == payload["filters"]
     assert payload["data_source"] == "demo"
     assert payload["simulation_version"] == snapshot.simulation_version
     assert payload["facts"]["transaction_count"] == snapshot.total_transactions

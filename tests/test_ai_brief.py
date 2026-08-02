@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from http.client import IncompleteRead
 from io import BytesIO
 from unittest.mock import Mock
 from urllib.error import HTTPError, URLError
@@ -52,12 +53,30 @@ def _valid_content() -> dict[str, object]:
         "summary": "Four aggregate transactions have a 50% success rate.",
         "risks": ["Gateway B has an active simulated alert."],
         "actions": ["Review simulated routing from Gateway B to Gateway A."],
-        "evidence": ["4 transactions; 50% success rate; 22.5 ms average latency."],
+        "evidence": [
+            "Overall: 4 transactions; 50.0% success rate; 2 failed; "
+            "22.5 ms average latency; 30.0 ms p95 latency."
+        ],
     }
 
 
-def _http_error(code: int) -> HTTPError:
-    return HTTPError("https://provider/v1/messages", code, "error", {}, None)
+def _http_error(code: int, body=None) -> HTTPError:
+    return HTTPError("https://provider/v1/messages", code, "error", {}, body)
+
+
+class TrackedBody(BytesIO):
+    def __init__(self) -> None:
+        super().__init__(b"provider error")
+        self.close_count = 0
+
+    def close(self) -> None:
+        self.close_count += 1
+        super().close()
+
+
+class IncompleteResponse(BytesIO):
+    def read(self, *_args, **_kwargs):
+        raise IncompleteRead(b"partial", 10)
 
 
 def test_build_brief_facts_uses_snapshot_aggregates_only(
@@ -96,6 +115,10 @@ def test_prompt_requests_json_only_with_four_required_fields(
     assert '"evidence"' in prompt
     assert json.dumps(facts, sort_keys=True) in prompt
     assert "Use only the supplied aggregate facts" in prompt
+    assert (
+        "Overall: 4 transactions; 50.0% success rate; 2 failed; "
+        "22.5 ms average latency; 30.0 ms p95 latency."
+    ) in prompt
 
 
 def test_myanmar_prompt_is_localized_and_preserves_unicode(
@@ -163,6 +186,23 @@ def test_request_contains_only_prompted_aggregate_facts(
     assert "secret" not in json.dumps(payload)
 
 
+def test_invalid_base_url_returns_local_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    provider = Mock(side_effect=AssertionError("invalid URL reached transport"))
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="://invalid",
+        api_key="x",
+    )
+
+    assert result.origin == "local"
+    provider.assert_not_called()
+
+
 def test_retry_exhaustion_returns_local_brief(
     monkeypatch: pytest.MonkeyPatch,
     facts: dict[str, object],
@@ -183,6 +223,66 @@ def test_retry_exhaustion_returns_local_brief(
     sleep.assert_called_once()
     assert result.origin == "local"
     assert result.content == ai_brief.build_local_brief(facts, "en")
+
+
+def test_attempts_above_two_are_capped_at_two_provider_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    provider = Mock(side_effect=URLError("offline"))
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="https://provider",
+        api_key="x",
+        attempts=4,
+        sleep=lambda _delay: None,
+    )
+
+    assert provider.call_count == 2
+    assert result.origin == "local"
+
+
+def test_attempts_one_disables_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    provider = Mock(side_effect=URLError("offline"))
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="https://provider",
+        api_key="x",
+        attempts=1,
+    )
+
+    assert provider.call_count == 1
+    assert result.origin == "local"
+
+
+def test_incomplete_response_read_retries_once(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    provider = Mock(
+        side_effect=[IncompleteResponse(), _provider_response(_valid_content())]
+    )
+    sleep = Mock()
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="https://provider",
+        api_key="x",
+        attempts=2,
+        sleep=sleep,
+    )
+
+    assert provider.call_count == 2
+    sleep.assert_called_once()
+    assert result.origin == "ai"
 
 
 @pytest.mark.parametrize(
@@ -226,6 +326,31 @@ def test_auth_error_does_not_retry(
 
     assert provider.call_count == 1
     assert result.origin == "local"
+
+
+@pytest.mark.parametrize(("status", "expected_calls"), [(401, 1), (503, 2)])
+def test_http_error_response_bodies_are_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+    status: int,
+    expected_calls: int,
+) -> None:
+    bodies = [TrackedBody() for _ in range(expected_calls)]
+    errors = [_http_error(status, body) for body in bodies]
+    provider = Mock(side_effect=errors)
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="https://provider",
+        api_key="x",
+        attempts=2,
+        sleep=lambda _delay: None,
+    )
+
+    assert result.origin == "local"
+    assert provider.call_count == expected_calls
+    assert [body.close_count for body in bodies] == [1] * expected_calls
 
 
 @pytest.mark.parametrize(
@@ -296,6 +421,77 @@ def test_percentage_evidence_cannot_reuse_an_unrelated_aggregate_number(
     )
 
     assert result.origin == "local"
+
+
+def test_evidence_rejects_value_borrowed_from_another_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    unequal_gateways = {
+        **facts,
+        "gateways": [
+            {"name": "Gateway A", "transactions": 3, "success_rate": 1.0},
+            {"name": "Gateway B", "transactions": 1, "success_rate": 0.0},
+        ],
+    }
+    mismatched = {
+        **_valid_content(),
+        "evidence": ["Gateway A: 1 transactions; 100.0% success rate."],
+    }
+    provider = Mock(return_value=_provider_response(mismatched))
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        unequal_gateways,
+        base_url="https://provider",
+        api_key="x",
+    )
+
+    assert result.origin == "local"
+
+
+def test_evidence_rejects_unsupported_text_without_numbers(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    unsupported = {**_valid_content(), "evidence": ["Everything looks fine."]}
+    provider = Mock(return_value=_provider_response(unsupported))
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        base_url="https://provider",
+        api_key="x",
+    )
+
+    assert result.origin == "local"
+
+
+def test_valid_myanmar_evidence_reference_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+    facts: dict[str, object],
+) -> None:
+    myanmar = {
+        "summary": "စုစုပေါင်းအခြေအနေကို စစ်ဆေးပြီးဖြစ်သည်။",
+        "risks": ["Gateway B ကို စောင့်ကြည့်ရန် လိုသည်။"],
+        "actions": ["သရုပ်ပြ routing ကို ပြန်လည်စစ်ဆေးပါ။"],
+        "evidence": [
+            "စုစုပေါင်း: ငွေပေးချေမှု 4 ခု; အောင်မြင်နှုန်း 50.0%; "
+            "မအောင်မြင်မှု 2 ခု; ပျမ်းမျှတုံ့ပြန်ချိန် 22.5 ms; "
+            "p95 တုံ့ပြန်ချိန် 30.0 ms။"
+        ],
+    }
+    provider = Mock(return_value=_provider_response(myanmar))
+    monkeypatch.setattr(ai_brief.urllib.request, "urlopen", provider)
+
+    result = ai_brief.generate_brief_result(
+        facts,
+        language="my",
+        base_url="https://provider",
+        api_key="x",
+    )
+
+    assert result.origin == "ai"
 
 
 def test_non_retryable_transport_failure_returns_local_without_retry(

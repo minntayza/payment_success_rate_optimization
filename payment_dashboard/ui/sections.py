@@ -161,10 +161,12 @@ def render_ai_operations_brief(
                 "language": language,
                 "model": model,
                 "filters": {
-                    "gateways": filters.gateways,
-                    "transaction_types": filters.transaction_types,
-                    "devices": filters.devices,
-                    "statuses": filters.statuses,
+                    "gateways": _normalized_filter_values(filters.gateways),
+                    "transaction_types": _normalized_filter_values(
+                        filters.transaction_types
+                    ),
+                    "devices": _normalized_filter_values(filters.devices),
+                    "statuses": _normalized_filter_values(filters.statuses),
                     "start": filters.start.isoformat() if filters.start else None,
                     "end": filters.end.isoformat() if filters.end else None,
                 },
@@ -211,6 +213,11 @@ def render_ai_operations_brief(
             with st.expander(translate("ai.evidence", language)):
                 for evidence in brief.content.evidence:
                     st.markdown(f"- {evidence}")
+
+
+def _normalized_filter_values(values: tuple[str, ...]) -> tuple[str, ...]:
+    """Return set-valued filters in one deterministic cache-key order."""
+    return tuple(sorted(set(values)))
 
 
 def render_kpis(
