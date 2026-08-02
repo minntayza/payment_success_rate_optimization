@@ -529,7 +529,6 @@ def render_app() -> None:
     st.number_input(
         translate("pagination.page", language),
         min_value=1,
-        value=page_number,
         step=1,
         key="transaction_page",
         disabled=True,

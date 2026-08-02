@@ -467,6 +467,40 @@ def _track_renderers(
 
 
 @pytest.mark.integration
+def test_pagination_widget_does_not_override_session_state(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    """Pagination state must not compete with an explicit widget default."""
+    number_inputs: list[dict[str, object]] = []
+    _patch_render_app_shell(monkeypatch, dashboard_state)
+    monkeypatch.setattr(
+        app_module.st,
+        "number_input",
+        lambda *_, **kwargs: number_inputs.append(kwargs) or 1,
+    )
+    for renderer in (
+        "render_story_hero",
+        "render_kpis",
+        "render_gateway_health",
+        "render_gateway_performance",
+        "render_success_trend",
+        "render_failure_analysis",
+        "render_ai_operations_brief",
+        "render_recent_transactions",
+        "render_interpretation_guide",
+    ):
+        monkeypatch.setattr(app_module, renderer, lambda *_, **__: None)
+    monkeypatch.setattr(app_module, "render_admin_panel", lambda *_, **__: False)
+
+    app_module.render_app()
+
+    assert len(number_inputs) == 1
+    assert number_inputs[0]["key"] == "transaction_page"
+    assert "value" not in number_inputs[0]
+
+
+@pytest.mark.integration
 def test_story_first_composition_and_admin_rerun(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,

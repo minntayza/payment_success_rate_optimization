@@ -40,11 +40,12 @@ def run_dashboard_smoke(
                 )
 
             source_badge = page.locator(SOURCE_BADGE_SELECTOR)
+            visible_source_badge = source_badge.first
             try:
-                source_badge.wait_for(state="visible", timeout=TIMEOUT_MS)
+                visible_source_badge.wait_for(state="visible", timeout=TIMEOUT_MS)
             except Exception as exc:
                 raise SmokeCheckError("Dashboard source badge is not visible") from exc
-            if source_badge.count() == 0 or not source_badge.first.is_visible():
+            if not visible_source_badge.is_visible():
                 raise SmokeCheckError("Dashboard source badge is not visible")
 
             metric_labels = page.locator(METRIC_LABEL_SELECTOR)

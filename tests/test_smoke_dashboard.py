@@ -45,6 +45,8 @@ class _Locator:
     def wait_for(self, *, state: str, timeout: int) -> None:
         assert state == "visible"
         assert timeout > 0
+        if len(self.elements) > 1:
+            raise RuntimeError("strict mode violation")
         for item in self.elements:
             if item.visible_after_wait:
                 item.visible = True
@@ -180,6 +182,20 @@ def test_browser_smoke_rejects_missing_source_badge() -> None:
 
     with pytest.raises(module.SmokeCheckError, match="source badge"):
         _run(module, _Page(source_badge=[]))
+
+
+@pytest.mark.integration
+def test_browser_smoke_accepts_multiple_visible_source_badges() -> None:
+    """Repeated responsive badges must not trigger Playwright strict-mode failures."""
+    module = _load_smoke_module()
+    page = _Page(
+        source_badge=[
+            _Element("DEMO Simulated demo data"),
+            _Element("DEMO Simulated demo data"),
+        ]
+    )
+
+    _run(module, page)
 
 
 @pytest.mark.integration
