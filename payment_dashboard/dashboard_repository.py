@@ -46,6 +46,10 @@ class PageRequest:
     size: int = 50
 
     def __post_init__(self) -> None:
+        if type(self.number) is not int:
+            raise ValueError("page number must be an integer")
+        if type(self.size) is not int:
+            raise ValueError("page size must be an integer")
         if self.number < 1:
             raise ValueError("page number must be at least 1")
         if not 1 <= self.size <= 100:

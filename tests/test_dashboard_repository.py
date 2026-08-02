@@ -67,6 +67,13 @@ def test_page_number_and_date_range_are_validated() -> None:
         DashboardFilters(start=date(2025, 1, 18), end=date(2025, 1, 17))
 
 
+@pytest.mark.parametrize("number, size", [(1.5, 1), (1, 1.5), (True, 1), (1, False)])
+def test_page_request_rejects_non_integer_values(number: object, size: object) -> None:
+    """Pagination bounds must be real integers before they are used as slices."""
+    with pytest.raises(ValueError, match="page (number|size)"):
+        PageRequest(number=number, size=size)  # type: ignore[arg-type]
+
+
 def test_pandas_repository_sorts_pages_and_exposes_snapshot_metadata(
     prepared_fixture: pd.DataFrame,
 ) -> None:
