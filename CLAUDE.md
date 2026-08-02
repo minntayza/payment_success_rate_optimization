@@ -80,16 +80,16 @@ payment_dashboard/
 
 ### Data Flow
 1. **Raw data** (`data/raw/transaction_data.csv`) → Kaggle transaction dataset
-2. **Preparation** (`prepare_data.py`) → Validates schema, sorts chronologically, assigns random Gateway A-D labels with fixed seed
+2. **Preparation** (`prepare_data.py`) → Validates schema, sorts chronologically, and applies the versioned, seeded gateway/outcome simulation
 3. **Processed data** (`data/processed/transactions_with_gateways.csv`) → Enriched CSV loaded by the app
-4. **Dashboard** (`app.py`) → Streamlit UI with replay slider and filters
-5. **Analytics/Alerting** → Compute metrics on filtered/replayed subsets
+4. **Dashboard** (`app.py`) → Streamlit UI with filters and paginated transaction history
+5. **Analytics/Alerting** → Compute display metrics from filters and alerts from full active history
 
 ### Key Modules
 
 - **`config.py`** — Central constants: `GATEWAYS`, `DEFAULT_SEED`, `ALERT_WINDOW_SIZE`, `ALERT_THRESHOLD`, `DEFAULT_DATA_PATH`, `CHART_COLORS`, `STATUSES`, `REQUIRED_COLUMNS`.
-- **`models.py`** — `DashboardState` frozen dataclass with typed fields: `replay_frame`, `display_frame`, `alerts`.
-- **`app.py`** — Streamlit entry point. Manages session state (replay slider, filters), orchestrates data loading via `build_dashboard_state()`. UI rendering delegated to `ui/` modules.
+- **`models.py`** — Typed dashboard filters, pagination requests, snapshots, and transaction records.
+- **`app.py`** — Streamlit entry point. Manages filters and pagination, then loads snapshots through the dashboard repository. UI rendering is delegated to `ui/` modules.
 - **`ui/charts.py`** — Plotly Express figure builders: `gateway_success_chart()`, `gateway_volume_chart()`, `success_trend_chart()`, `failure_breakdown_chart()`.
 - **`ui/sections.py`** — Streamlit section renderers: `render_kpis()`, `render_gateway_health()`, `render_gateway_performance()`, `render_success_trend()`, `render_failure_analysis()`, `render_recent_transactions()`, `render_interpretation_guide()`.
 - **`analytics.py`** — Pure functions: `summary_metrics()`, `gateway_summary()`, `failure_breakdown()`, `success_rate_series()`, `apply_filters()`, `add_latency_band()`.
@@ -101,10 +101,10 @@ payment_dashboard/
 
 ### Alert Logic
 - Baseline = gateway's success rate across entire processed dataset
-- Rolling rate = success rate of gateway's latest 50 replayed transactions
+- Rolling rate = success rate of gateway's latest 50 active transactions
 - Alert triggers when drop (baseline - rolling) ≥ 10 percentage points
-- "Insufficient history" when fewer than 50 replayed transactions exist for a gateway
-- Alerts use unfiltered replay stream; display filters only affect charts/KPIs
+- "Insufficient history" when fewer than 50 active transactions exist for a gateway
+- Alerts use unfiltered active history; display filters only affect charts/KPIs
 
 ### Data Schema
 Required columns in CSV: `Transaction ID`, `Sender Account ID`, `Receiver Account ID`, `Transaction Amount`, `Transaction Type`, `Timestamp`, `Transaction Status` (Success/Failed), `Fraud Flag`, `Geolocation (Latitude/Longitude)`, `Device Used`, `Network Slice ID`, `Latency (ms)`, `Slice Bandwidth (Mbps)`, `PIN Code`. After preparation: adds `Bank Gateway` (Gateway A-D).
@@ -117,7 +117,6 @@ Required columns in CSV: `Transaction ID`, `Sender Account ID`, `Receiver Accoun
 - `PAYMENT_DATA_PATH` — Override default data path (`data/processed/transactions_with_gateways.csv`)
 
 ## Important Notes
-- Gateway labels (A-D) are randomly simulated with a fixed seed — do not interpret as real gateway performance
-- The replay slider simulates chronological arrival from CSV, not a streaming pipeline
+- Gateway assignments and dashboard outcomes are controlled simulations with a fixed seed and version; do not interpret them as real gateway performance
 - `data/raw/` and `data/processed/` are gitignored; source CSV must be provided manually
 - Customer support interpretation guide: `docs/customer-support-guide.md`
