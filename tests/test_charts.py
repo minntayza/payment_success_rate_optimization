@@ -43,6 +43,7 @@ def dashboard_snapshot(dashboard_fixture: pd.DataFrame) -> DashboardSnapshot:
     )
 
 
+@pytest.mark.integration
 def test_snapshot_gateway_charts_localize_myanmar_axes(
     monkeypatch: pytest.MonkeyPatch,
     dashboard_snapshot: DashboardSnapshot,
@@ -64,6 +65,7 @@ def test_snapshot_gateway_charts_localize_myanmar_axes(
     assert charts[1].layout.yaxis.title.text == "ငွေပေးချေမှုများ"
 
 
+@pytest.mark.integration
 def test_snapshot_trend_chart_localizes_myanmar_axes(
     monkeypatch: pytest.MonkeyPatch,
     dashboard_snapshot: DashboardSnapshot,
@@ -82,6 +84,7 @@ def test_snapshot_trend_chart_localizes_myanmar_axes(
     assert charts[0].layout.yaxis.title.text == "အောင်မြင်နှုန်း"
 
 
+@pytest.mark.integration
 def test_snapshot_failure_chart_localizes_myanmar_axes(
     monkeypatch: pytest.MonkeyPatch,
     dashboard_snapshot: DashboardSnapshot,

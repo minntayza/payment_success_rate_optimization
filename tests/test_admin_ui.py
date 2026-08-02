@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pandas as pd
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from payment_dashboard.admin_auth import hash_fingerprint
@@ -41,6 +42,7 @@ def test_demo_snapshot_disables_editing_even_with_database_credentials(
     manager.assert_not_called()
 
 
+@pytest.mark.integration
 def test_authenticated_live_admin_handles_empty_transaction_page() -> None:
     password_hash = "configured-hash"
     app = AppTest.from_string(
