@@ -245,7 +245,7 @@ def _alert_records(
     documents: list[dict[str, object]],
     branch: list[dict[str, Any]],
 ) -> list[dict[str, object]]:
-    window_size = int(_operand(branch, "$lte", "$recency_rank"))
+    window_size = int(branch[0]["$group"]["latest_statuses"]["$topN"]["n"])
     threshold = float(_operand(branch, "$gte", "$drop"))
     rounds_drop = "$round" in _operators(branch)
     records = []
@@ -411,10 +411,31 @@ def test_alert_cutoff_prefers_highest_transaction_ids_when_timestamps_tie() -> N
     gateway_a = snapshot.alerts.set_index("Bank Gateway").loc["Gateway A"]
     assert gateway_a["rolling_rate"] == 0.0
     alert_pipeline = database["transactions"].aggregate_calls[1][1]["$facet"]["alerts"]
-    assert alert_pipeline[0]["$setWindowFields"]["sortBy"] == {
-        "transaction_timestamp": -1,
-        "transaction_id": -1,
+    assert "$documentNumber" not in _operators(alert_pipeline)
+    assert alert_pipeline[0]["$group"]["latest_statuses"]["$topN"] == {
+        "sortBy": {"transaction_timestamp": -1, "transaction_id": -1},
+        "output": "$transaction_status",
+        "n": mongodb.ALERT_WINDOW_SIZE,
     }
+
+
+def test_document_number_window_uses_atlas_compatible_single_sort_key() -> None:
+    """Atlas rejects $documentNumber when sortBy has multiple fields."""
+    database = Database([_document("TX-1")])
+
+    mongodb.MongoDashboardRepository(database).fetch(
+        DashboardFilters(), PageRequest(number=1, size=1)
+    )
+
+    metrics = database["transactions"].aggregate_calls[0][1]["$facet"]["metrics"]
+    document_number_windows = [
+        stage["$setWindowFields"]
+        for stage in metrics
+        if "$setWindowFields" in stage
+        and "$documentNumber" in _operators(stage["$setWindowFields"])
+    ]
+    assert document_number_windows
+    assert all(len(window["sortBy"]) == 1 for window in document_number_windows)
 
 
 def test_metadata_is_deterministic_and_independent_of_display_filters() -> None:

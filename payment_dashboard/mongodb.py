@@ -271,7 +271,7 @@ def _metrics_pipeline() -> list[dict[str, object]]:
     return [
         {
             "$setWindowFields": {
-                "sortBy": {"latency_ms": 1, "transaction_id": 1},
+                "sortBy": {"latency_ms": 1},
                 "output": {
                     "rank": {"$documentNumber": {}},
                     "transaction_count": {
@@ -457,45 +457,20 @@ def _failure_pipeline() -> list[dict[str, object]]:
 def _alerts_pipeline() -> list[dict[str, object]]:
     return [
         {
-            "$setWindowFields": {
-                "partitionBy": "$bank_gateway",
-                "sortBy": {"transaction_timestamp": -1, "transaction_id": -1},
-                "output": {"recency_rank": {"$documentNumber": {}}},
-            }
-        },
-        {
             "$group": {
                 "_id": "$bank_gateway",
                 "transaction_count": {"$sum": 1},
                 "success_count": {
                     "$sum": {"$cond": [_status_is(SUCCESS_STATUS), 1, 0]}
                 },
-                "rolling_count": {
-                    "$sum": {
-                        "$cond": [
-                            {"$lte": ["$recency_rank", ALERT_WINDOW_SIZE]},
-                            1,
-                            0,
-                        ]
-                    }
-                },
-                "rolling_success_count": {
-                    "$sum": {
-                        "$cond": [
-                            {
-                                "$and": [
-                                    {
-                                        "$lte": [
-                                            "$recency_rank",
-                                            ALERT_WINDOW_SIZE,
-                                        ]
-                                    },
-                                    _status_is(SUCCESS_STATUS),
-                                ]
-                            },
-                            1,
-                            0,
-                        ]
+                "latest_statuses": {
+                    "$topN": {
+                        "sortBy": {
+                            "transaction_timestamp": -1,
+                            "transaction_id": -1,
+                        },
+                        "output": "$transaction_status",
+                        "n": ALERT_WINDOW_SIZE,
                     }
                 },
             }
@@ -503,6 +478,20 @@ def _alerts_pipeline() -> list[dict[str, object]]:
         {
             "$set": {
                 "baseline_rate": {"$divide": ["$success_count", "$transaction_count"]},
+                "rolling_count": {"$size": "$latest_statuses"},
+                "rolling_success_count": {
+                    "$size": {
+                        "$filter": {
+                            "input": "$latest_statuses",
+                            "as": "status",
+                            "cond": {"$eq": ["$$status", SUCCESS_STATUS]},
+                        }
+                    }
+                },
+            }
+        },
+        {
+            "$set": {
                 "has_sufficient_history": {
                     "$gte": ["$rolling_count", ALERT_WINDOW_SIZE]
                 },
