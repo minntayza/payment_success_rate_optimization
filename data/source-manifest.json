@@ -1,0 +1,9 @@
+{
+  "dataset": "Transaction Data for Banking Operations",
+  "source_url": "https://www.kaggle.com/datasets/ziya07/transaction-data-for-banking-operations",
+  "license": "CC0: Public Domain",
+  "retrieved_at": "2026-08-12",
+  "filename": "transaction_data.csv",
+  "rows": 1000,
+  "sha256": "2b7c41119e245c859922c0bcb473dfac6062c30cc22af2cd7060df1c8707da95"
+}

@@ -31,6 +31,7 @@ def test_frame_to_documents_uses_native_values(sample_transactions) -> None:
     assert isinstance(document["fraud_flag"], bool)
     assert document["source_transaction_status"] == "Success"
     assert document["simulation_version"]
+    assert "pin_code" not in document
 
 
 def test_import_uses_batched_upserts(

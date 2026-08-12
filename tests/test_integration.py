@@ -19,6 +19,7 @@ from payment_dashboard.analytics import (
 from payment_dashboard.app import build_dashboard_state
 from payment_dashboard.data_loader import load_transactions
 from payment_dashboard.prepare_data import assign_gateways
+from payment_dashboard.simulation import simulate_transactions
 
 
 def _run_prepared_app(
@@ -26,7 +27,7 @@ def _run_prepared_app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[AppTest, date, date]:
     prepared_path = tmp_path / "prepared_transactions.csv"
-    prepared = _make_transactions(200)
+    prepared = simulate_transactions(_make_transactions(200))
     prepared["Timestamp"] = pd.date_range(
         "2025-06-01",
         periods=len(prepared),
@@ -252,8 +253,8 @@ class TestEdgeCases:
         alerts = evaluate_alerts(frame, frame)
         row = alerts.iloc[0]
         assert row["baseline_rate"] == 1.0
-        assert row["rolling_rate"] == 1.0
-        assert row["drop"] == 0.0
+        assert pd.isna(row["rolling_rate"])
+        assert pd.isna(row["drop"])
         assert not row["is_alert"]
 
     def test_all_failures_triggers_alert(self):
@@ -282,9 +283,9 @@ class TestEdgeCases:
         alerts = evaluate_alerts(full, replay)
         row = alerts.iloc[0]
         assert row["baseline_rate"] == 0.7
-        assert row["rolling_rate"] == 0.0
-        assert row["drop"] == 0.7
-        assert row["is_alert"]
+        assert pd.isna(row["rolling_rate"])
+        assert pd.isna(row["drop"])
+        assert not row["is_alert"]
 
     def test_single_transaction_insufficient_history(self):
         frame = pd.DataFrame(

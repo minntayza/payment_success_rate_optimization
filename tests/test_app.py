@@ -137,7 +137,7 @@ def test_alerts_ignore_display_filters(sample_transactions):
     assert len(state.replay_frame) == 220
     assert set(state.display_frame["Bank Gateway"]) <= {"Gateway D"}
     assert set(state.display_frame["Transaction Status"]) <= {"Failed"}
-    assert state.alerts["has_sufficient_history"].all()
+    assert not state.alerts["has_sufficient_history"].any()
 
 
 @pytest.mark.integration

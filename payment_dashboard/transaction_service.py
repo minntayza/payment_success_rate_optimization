@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,6 +15,19 @@ from payment_dashboard.mongodb import COLUMN_MAP
 MANUAL_SIMULATION_VERSION = "manual-v1"
 
 
+@dataclass(frozen=True, slots=True)
+class AuthenticatedPrincipal:
+    subject: str
+    role: str
+    authenticated_at: datetime
+
+
+def _require_principal(principal: AuthenticatedPrincipal) -> AuthenticatedPrincipal:
+    if not isinstance(principal, AuthenticatedPrincipal):
+        raise TypeError("Mutation requires an AuthenticatedPrincipal")
+    return principal
+
+
 class TransactionValidationError(ValueError):
     """Transaction input did not satisfy the application contract."""
 
@@ -22,7 +37,7 @@ class TransactionMutationError(RuntimeError):
 
 
 TRANSACTION_TYPES = frozenset({"Transfer", "Deposit", "Withdrawal"})
-DEVICES = frozenset({"Mobile", "Desktop"})
+DEVICES = frozenset({"Mobile", "Desktop", "Tablet"})
 SIMULATION_METADATA_FIELDS = {
     "Source Transaction Status",
     "Simulation Version",
@@ -54,13 +69,18 @@ def validate_transaction(values: dict[str, object]) -> dict[str, object]:
     if not isinstance(values["Fraud Flag"], bool):
         raise TransactionValidationError("Fraud Flag must be true or false")
     for field in ("Transaction Amount", "Latency (ms)", "Slice Bandwidth (Mbps)"):
-        number = pd.to_numeric(values[field], errors="coerce")
-        if pd.isna(number) or float(number) < 0:
+        try:
+            number = float(str(values[field]))
+        except ValueError as exc:
+            raise TransactionValidationError(
+                f"{field} must be numeric and non-negative"
+            ) from exc
+        if not pd.notna(number) or number < 0:
             raise TransactionValidationError(
                 f"{field} must be numeric and non-negative"
             )
     try:
-        timestamp = pd.Timestamp(values["Timestamp"])
+        timestamp = pd.Timestamp(str(values["Timestamp"]))
     except (TypeError, ValueError) as exc:
         raise TransactionValidationError("Timestamp must be valid") from exc
     if pd.isna(timestamp):
@@ -78,19 +98,16 @@ def validate_transaction(values: dict[str, object]) -> dict[str, object]:
     else:
         timestamp = timestamp.tz_convert(UTC)
     payload["transaction_timestamp"] = timestamp.to_pydatetime()
-    payload["transaction_amount"] = float(payload["transaction_amount"])
-    payload["latency_ms"] = float(payload["latency_ms"])
-    payload["slice_bandwidth_mbps"] = float(payload["slice_bandwidth_mbps"])
-    payload["pin_code"] = str(payload["pin_code"])
+    payload["transaction_amount"] = float(str(payload["transaction_amount"]))
+    payload["latency_ms"] = float(str(payload["latency_ms"]))
+    payload["slice_bandwidth_mbps"] = float(str(payload["slice_bandwidth_mbps"]))
     return payload
 
 
 def _sanitized(document: dict[str, object] | None) -> dict[str, object] | None:
     if document is None:
         return None
-    return {
-        key: value for key, value in document.items() if key not in {"_id", "pin_code"}
-    }
+    return {key: value for key, value in document.items() if key != "_id"}
 
 
 def _audit(
@@ -99,23 +116,40 @@ def _audit(
     action: str,
     old_document: dict[str, object] | None,
     new_document: dict[str, object] | None,
-    actor: str,
+    principal: AuthenticatedPrincipal,
+    session: Any = None,
 ) -> None:
+    options = {"session": session} if session is not None else {}
     database["transaction_audit_log"].insert_one(
         {
             "transaction_id": transaction_id,
             "action": action,
-            "actor": actor,
+            "actor": principal.subject,
+            "actor_role": principal.role,
             "changed_at": datetime.now(UTC),
             "old_document": _sanitized(old_document),
             "new_document": _sanitized(new_document),
-        }
+        },
+        **options,
     )
 
 
+def _atomic(database: Any, mutation: Callable[[Any], None]) -> None:
+    """Run the business mutation and audit in one MongoDB transaction."""
+    client = getattr(database, "client", None)
+    if client is None:
+        mutation(None)
+        return
+    with client.start_session() as session, session.start_transaction():
+        mutation(session)
+
+
 def create_transaction(
-    database: Any, values: dict[str, object], actor: str = "administrator"
+    database: Any,
+    values: dict[str, object],
+    principal: AuthenticatedPrincipal,
 ) -> None:
+    principal = _require_principal(principal)
     payload = validate_transaction(values)
     now = datetime.now(UTC)
     payload.update(
@@ -125,13 +159,26 @@ def create_transaction(
             "is_deleted": False,
             "created_at": now,
             "updated_at": now,
-            "created_by": actor,
-            "updated_by": actor,
+            "created_by": principal.subject,
+            "updated_by": principal.subject,
         }
     )
     try:
-        database["transactions"].insert_one(payload)
-        _audit(database, str(payload["transaction_id"]), "INSERT", None, payload, actor)
+
+        def mutation(session: Any) -> None:
+            options = {"session": session} if session is not None else {}
+            database["transactions"].insert_one(payload, **options)
+            _audit(
+                database,
+                str(payload["transaction_id"]),
+                "INSERT",
+                None,
+                payload,
+                principal,
+                session,
+            )
+
+        _atomic(database, mutation)
     except Exception as exc:
         raise TransactionMutationError(
             "Unable to create the transaction. Check that its ID is unique."
@@ -142,8 +189,9 @@ def update_transaction(
     database: Any,
     transaction_id: str,
     values: dict[str, object],
-    actor: str = "administrator",
+    principal: AuthenticatedPrincipal,
 ) -> None:
+    principal = _require_principal(principal)
     payload = validate_transaction(values)
     payload.pop("transaction_id", None)
     payload.pop("source_transaction_status", None)
@@ -152,55 +200,70 @@ def update_transaction(
         {
             "simulation_version": MANUAL_SIMULATION_VERSION,
             "updated_at": datetime.now(UTC),
-            "updated_by": actor,
+            "updated_by": principal.subject,
         }
     )
     try:
-        collection = database["transactions"]
-        query = {"transaction_id": transaction_id, "is_deleted": False}
-        old_document = collection.find_one(query)
-        result = collection.update_one(query, {"$set": payload})
-        if not result.matched_count:
-            raise LookupError("Transaction not found")
-        new_document = {**(old_document or {}), **payload}
-        _audit(
-            database,
-            transaction_id,
-            "UPDATE",
-            old_document,
-            new_document,
-            actor,
-        )
+
+        def mutation(session: Any) -> None:
+            collection = database["transactions"]
+            query = {"transaction_id": transaction_id, "is_deleted": False}
+            options = {"session": session} if session is not None else {}
+            old_document = collection.find_one(query, **options)
+            result = collection.update_one(query, {"$set": payload}, **options)
+            if not result.matched_count:
+                raise LookupError("Transaction not found")
+            new_document = {**(old_document or {}), **payload}
+            _audit(
+                database,
+                transaction_id,
+                "UPDATE",
+                old_document,
+                new_document,
+                principal,
+                session,
+            )
+
+        _atomic(database, mutation)
     except Exception as exc:
         raise TransactionMutationError("Unable to update the transaction.") from exc
 
 
 def soft_delete_transaction(
-    database: Any, transaction_id: str, actor: str = "administrator"
+    database: Any,
+    transaction_id: str,
+    principal: AuthenticatedPrincipal,
 ) -> None:
+    principal = _require_principal(principal)
     if not transaction_id.strip():
         raise TransactionValidationError("Transaction ID must not be blank")
     changes = {
         "is_deleted": True,
         "deleted_at": datetime.now(UTC),
-        "deleted_by": actor,
+        "deleted_by": principal.subject,
         "updated_at": datetime.now(UTC),
-        "updated_by": actor,
+        "updated_by": principal.subject,
     }
     try:
-        collection = database["transactions"]
-        query = {"transaction_id": transaction_id, "is_deleted": False}
-        old_document = collection.find_one(query)
-        result = collection.update_one(query, {"$set": changes})
-        if not result.matched_count:
-            raise LookupError("Transaction not found")
-        _audit(
-            database,
-            transaction_id,
-            "SOFT_DELETE",
-            old_document,
-            {**(old_document or {}), **changes},
-            actor,
-        )
+
+        def mutation(session: Any) -> None:
+            collection = database["transactions"]
+            query = {"transaction_id": transaction_id, "is_deleted": False}
+            options = {"session": session} if session is not None else {}
+            old_document = collection.find_one(query, **options)
+            result = collection.update_one(query, {"$set": changes}, **options)
+            if not result.matched_count:
+                raise LookupError("Transaction not found")
+            _audit(
+                database,
+                transaction_id,
+                "SOFT_DELETE",
+                old_document,
+                {**(old_document or {}), **changes},
+                principal,
+                session,
+            )
+
+        _atomic(database, mutation)
     except Exception as exc:
         raise TransactionMutationError("Unable to delete the transaction.") from exc

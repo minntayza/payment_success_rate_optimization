@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -55,6 +56,10 @@ from payment_dashboard.ui.admin import AUTH_STATE_KEY, render_admin_panel
 st.session_state[AUTH_STATE_KEY] = {{
     "authenticated": True,
     "fingerprint": "{hash_fingerprint(password_hash)}",
+    "subject": "demo-admin",
+    "role": "administrator",
+    "authenticated_at": "{datetime.now(UTC).isoformat()}",
+    "expires_at": "{(datetime.now(UTC) + timedelta(minutes=30)).isoformat()}",
 }}
 render_admin_panel(
     object(),
@@ -71,10 +76,10 @@ render_admin_panel(
     assert app.text_input(key="add_id")
 
 
-def test_row_values_preserve_pin_and_boolean(sample_transactions) -> None:
+def test_row_values_remove_pin_and_preserve_boolean(sample_transactions) -> None:
     frame = sample_transactions.iloc[:1].assign(**{"Bank Gateway": "Gateway A"})
     values = admin._row_values(frame.iloc[0])
-    assert values["PIN Code"] == "1111"
+    assert "PIN Code" not in values
     assert values["Fraud Flag"] is False
 
 
@@ -92,3 +97,11 @@ def test_authentication_requires_matching_hash_fingerprint(monkeypatch) -> None:
     )
     assert admin._is_authenticated("new") is False
     assert admin.AUTH_STATE_KEY not in admin.st.session_state
+
+
+def test_failed_admin_logins_trigger_bounded_cooldown(monkeypatch) -> None:
+    monkeypatch.setattr(admin.st, "session_state", {})
+    for _ in range(admin.MAX_LOGIN_ATTEMPTS):
+        admin._record_failed_login()
+    assert admin._login_allowed() is False
+    assert admin.LOGIN_FAILURES_KEY in admin.st.session_state

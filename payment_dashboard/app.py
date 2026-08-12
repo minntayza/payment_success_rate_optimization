@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
 import os
@@ -11,6 +12,8 @@ from dataclasses import replace
 from datetime import date
 from html import escape
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 # When Streamlit Cloud runs this file directly, payment_dashboard is not
 # an installed package. Load sibling modules by file path to avoid
@@ -35,11 +38,13 @@ FILTER_WIDGET_KEYS = (
 TRANSACTION_PAGE_SIZE = 50
 
 
-def _load(name: str):  # noqa: ANN001
+def _load(name: str) -> ModuleType:
     """Import a sibling module from the payment_dashboard package."""
     spec = importlib.util.spec_from_file_location(
         f"payment_dashboard.{name}", _PKG_DIR / f"{name}.py"
     )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load payment_dashboard.{name}")
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod
     try:
@@ -67,6 +72,13 @@ if __package__ in (None, ""):
         "transaction_service",
         "analytics",
         "alerting",
+        "routing_config",
+        "routing_models",
+        "routing_simulation",
+        "routing_policies",
+        "routing_optimizer",
+        "routing_evaluation",
+        "routing_repository",
     ):
         _load(_name)
 
@@ -101,11 +113,16 @@ from payment_dashboard.mongodb import (  # noqa: E402
     create_resources_from_env,
     load_dashboard_transactions,
 )
+from payment_dashboard.routing_models import (  # noqa: E402
+    OptimizationReport,
+)
+from payment_dashboard.routing_repository import PandasRoutingRepository  # noqa: E402
 from payment_dashboard.transaction_service import (  # noqa: E402
     DEVICES,
     TRANSACTION_TYPES,
 )
 from payment_dashboard.ui.admin import render_admin_panel  # noqa: E402
+from payment_dashboard.ui.optimization import render_optimization_report  # noqa: E402
 from payment_dashboard.ui.sections import (  # noqa: E402
     render_ai_operations_brief,
     render_empty_state,
@@ -192,6 +209,12 @@ def _load_demo_frame(language: Language = DEFAULT_LANGUAGE) -> pd.DataFrame:
         st.error(translate("errors.load_data", language, exc=exc))
         st.info(translate("errors.prepare_data_guidance", language))
         st.stop()
+
+
+@st.cache_resource(show_spinner=False)
+def _build_optimization_report(frame: pd.DataFrame) -> OptimizationReport:
+    """Build the deterministic synthetic benchmark independently of live reads."""
+    return PandasRoutingRepository().build_report(frame)
 
 
 @st.cache_resource(show_spinner=False)
@@ -318,13 +341,20 @@ def _render_source_status(
 
 def _apply_streamlit_secrets() -> None:
     """Expose approved root-level Streamlit secrets to existing clients."""
+    try:
+        from dotenv import dotenv_values
+
+        dotenv = dotenv_values(Path.cwd() / ".env")
+    except Exception:
+        dotenv = {}
     for key in CLOUD_SETTING_KEYS:
         if os.getenv(key):
             continue
-        try:
+        value = None
+        with contextlib.suppress(FileNotFoundError):
             value = st.secrets.get(key)
-        except FileNotFoundError:
-            return
+        if not value:
+            value = dotenv.get(key)
         if isinstance(value, str) and value:
             os.environ[key] = value
 
@@ -376,7 +406,7 @@ def _render_sidebar(
         translate("sidebar.replayed_transactions", language),
         min_value=1,
         max_value=len(full_frame),
-        value=_sidebar_value("replay_count", len(full_frame)),
+        value=cast(int, _sidebar_value("replay_count", len(full_frame))),
         help=translate("sidebar.replay_help", language),
         key="replay_count",
         on_change=_persist_sidebar_value,
@@ -481,7 +511,7 @@ def _render_repository_filters(
     )
     selected_dates = st.sidebar.date_input(
         translate("sidebar.date_range", language),
-        value=(),
+        value=[],
         key="date_filter",
         on_change=_reset_transaction_page,
     )
@@ -539,6 +569,14 @@ def render_app() -> None:
         disabled=True,
     )
     _render_source_status(snapshot, language)
+
+    optimization_frame = _load_demo_frame(language)
+    try:
+        optimization_report = _build_optimization_report(optimization_frame)
+    except ValueError as exc:
+        st.warning(f"Synthetic routing benchmark unavailable: {exc}")
+    else:
+        render_optimization_report(optimization_report)
 
     render_story_hero(snapshot, snapshot.source.value, language)
     render_kpis(snapshot, language)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -40,7 +41,7 @@ def verify_password(password: str, encoded: str) -> bool:
             "sha256", password.encode("utf-8"), salt, iterations
         )
         return hmac.compare_digest(actual, expected)
-    except (ValueError, TypeError, base64.binascii.Error):
+    except (ValueError, TypeError, binascii.Error):
         return False
 
 

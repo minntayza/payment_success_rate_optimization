@@ -68,7 +68,9 @@ def _dashboard_metrics(
     state: DashboardState | DashboardSnapshot,
 ) -> dict[str, int | float]:
     """Adapt legacy and repository dashboard state to one metric mapping."""
-    if isinstance(state, DashboardSnapshot):
+    # Streamlit can load the entry point as a script, creating an equivalent
+    # dataclass from a second module identity. The interface is the stable seam.
+    if hasattr(state, "metrics"):
         return dict(state.metrics)
     return summary_metrics(state.display_frame)
 
@@ -198,8 +200,9 @@ def render_ai_operations_brief(
             st.session_state[AI_BRIEF_RESULT_KEY] = brief
             st.session_state[AI_BRIEF_FINGERPRINT_KEY] = fingerprint
 
-        brief = st.session_state.get(AI_BRIEF_RESULT_KEY)
-        if isinstance(brief, BriefResult):
+        stored_brief = st.session_state.get(AI_BRIEF_RESULT_KEY)
+        if isinstance(stored_brief, BriefResult):
+            brief = stored_brief
             with st.container(key="ai_brief_result"):
                 st.caption(translate(f"ai.origin.{brief.origin}", language))
                 st.markdown(f"**{translate('ai.summary', language)}**")
@@ -266,7 +269,7 @@ def render_kpis(
                 f'<span class="kpi-icon" aria-hidden="true">{icon}</span>',
                 unsafe_allow_html=True,
             )
-            st.metric(label, value)
+            st.metric(str(label), str(value))
 
 
 def render_gateway_health(
@@ -324,7 +327,7 @@ def render_gateway_health(
                 status_column,
             ]
         ],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -365,8 +368,8 @@ def render_gateway_performance(
     else:
         success_chart = gateway_success_chart(frame, language=language)
         volume_chart = gateway_volume_chart(frame, language=language)
-    left.plotly_chart(success_chart, use_container_width=True)
-    right.plotly_chart(volume_chart, use_container_width=True)
+    left.plotly_chart(success_chart, width="stretch")
+    right.plotly_chart(volume_chart, width="stretch")
 
 
 def render_success_trend(
@@ -389,7 +392,7 @@ def render_success_trend(
         chart.update_layout(yaxis_tickformat=".0%", yaxis_range=[0, 1])
     else:
         chart = success_trend_chart(frame, language=language)
-    st.plotly_chart(chart, use_container_width=True)
+    st.plotly_chart(chart, width="stretch")
 
 
 def render_failure_analysis(
@@ -420,7 +423,7 @@ def render_failure_analysis(
     columns = st.columns(2)
     for index, (dimension, title) in enumerate(FAILURE_DIMENSIONS):
         chart = failure_breakdown_chart(frame, dimension, title, language=language)
-        columns[index % 2].plotly_chart(chart, use_container_width=True)
+        columns[index % 2].plotly_chart(chart, width="stretch")
 
 
 def render_recent_transactions(
@@ -442,7 +445,7 @@ def render_recent_transactions(
     )
     st.dataframe(
         display,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 

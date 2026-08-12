@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
-from payment_dashboard.prepare_data import assign_gateways, prepare_file
+from payment_dashboard.data_loader import DataValidationError
+from payment_dashboard.prepare_data import (
+    assign_gateways,
+    prepare_file,
+    verify_source_manifest,
+)
 from payment_dashboard.simulation import SIMULATION_VERSION
 
 
@@ -71,3 +77,15 @@ def test_prepare_file_writes_valid_enriched_copy(sample_transactions, tmp_path):
     )
     assert set(written["Transaction Status"]) <= {"Success", "Failed"}
     assert written["Simulation Version"].eq(SIMULATION_VERSION).all()
+    assert "PIN Code" not in written
+
+
+def test_source_manifest_rejects_wrong_checksum(tmp_path) -> None:
+    source = tmp_path / "source.csv"
+    source.write_text("wrong", encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        '{"filename":"source.csv","rows":1,"sha256":"bad"}', encoding="utf-8"
+    )
+    with pytest.raises(DataValidationError, match="checksum"):
+        verify_source_manifest(source, manifest)

@@ -27,9 +27,8 @@ def frame_to_documents(frame: pd.DataFrame) -> list[dict[str, object]]:
         prepared["transaction_timestamp"], utc=True
     ).map(lambda value: value.to_pydatetime())
     prepared["fraud_flag"] = prepared["fraud_flag"].astype(bool)
-    prepared["pin_code"] = prepared["pin_code"].astype(str)
     return [
-        {key: _native(value) for key, value in row.items()}
+        {str(key): _native(value) for key, value in row.items()}
         for row in prepared.to_dict(orient="records")
     ]
 

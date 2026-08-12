@@ -49,10 +49,19 @@ def _aggregate_result(documents: list[dict[str, object]]) -> dict[str, object]:
 def test_documents_to_frame_preserves_dashboard_contract() -> None:
     frame = mongodb.documents_to_frame([_document()])
     assert frame.loc[0, "Transaction ID"] == "TX-1"
-    assert frame.loc[0, "PIN Code"] == "0123"
+    assert "PIN Code" not in frame
     assert frame.loc[0, "Source Transaction Status"] == "Success"
     assert frame.loc[0, "Simulation Version"] == SIMULATION_VERSION
     assert pd.api.types.is_datetime64_any_dtype(frame["Timestamp"])
+
+
+def test_documents_to_frame_redacts_accounts_omitted_by_public_projection() -> None:
+    document = _document()
+    document.pop("sender_account_id")
+    document.pop("receiver_account_id")
+    frame = mongodb.documents_to_frame([document])
+    assert frame.loc[0, "Sender Account ID"] == "[redacted]"
+    assert frame.loc[0, "Receiver Account ID"] == "[redacted]"
 
 
 def test_documents_to_frame_supports_mixed_legacy_and_simulated_documents() -> None:
@@ -89,6 +98,19 @@ def test_ensure_indexes_creates_required_indexes() -> None:
     assert any(
         keys == [("is_deleted", 1), ("transaction_timestamp", -1)] for keys, _ in calls
     )
+
+
+def test_public_transaction_projection_is_an_allowlist() -> None:
+    projection = mongodb.PUBLIC_TRANSACTION_PROJECTION
+    assert projection["transaction_id"] == 1
+    assert "pin_code" not in projection
+    assert "sender_account_id" not in projection
+    assert "receiver_account_id" not in projection
+    pipeline = mongodb._display_dashboard_pipeline(
+        mongodb.DashboardFilters(), mongodb.PageRequest()
+    )
+    transactions = pipeline[1]["$facet"]["transactions"]
+    assert transactions[-1] == {"$project": projection}
 
 
 def test_load_queries_active_documents(monkeypatch) -> None:

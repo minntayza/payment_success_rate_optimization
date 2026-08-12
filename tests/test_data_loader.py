@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import pytest
 
+import payment_dashboard.data_loader as data_loader
 from payment_dashboard.data_loader import (
     DataValidationError,
     load_transactions,
@@ -43,6 +46,55 @@ def test_negative_latency_is_rejected(sample_transactions):
         validate_transactions(invalid, require_gateway=False)
 
 
+@pytest.mark.parametrize("value", ["maybe", 2, -1, None])
+def test_raw_validation_rejects_invalid_fraud_flags(sample_transactions, value):
+    invalid = sample_transactions.copy()
+    invalid["Fraud Flag"] = value
+
+    with pytest.raises(DataValidationError, match="Fraud Flag"):
+        data_loader.validate_raw_transactions(invalid)
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ("Transaction Type", "Refund"),
+        ("Device Used", "Smart Fridge"),
+        ("Transaction Amount", float("inf")),
+        ("Slice Bandwidth (Mbps)", -1),
+    ],
+)
+def test_raw_validation_rejects_invalid_domain_values(
+    sample_transactions, column, value
+):
+    invalid = sample_transactions.copy()
+    invalid.loc[0, column] = value
+
+    with pytest.raises(DataValidationError, match=re.escape(column)):
+        data_loader.validate_raw_transactions(invalid)
+
+
+def test_prepared_validation_requires_simulation_metadata(sample_transactions):
+    prepared = sample_transactions.drop(columns=["PIN Code"]).assign(
+        **{"Bank Gateway": "Gateway A"}
+    )
+
+    with pytest.raises(DataValidationError, match="Simulation Version"):
+        data_loader.validate_prepared_transactions(prepared)
+
+
+def test_prepared_loader_does_not_invent_legacy_simulation_version(
+    sample_transactions, tmp_path
+) -> None:
+    prepared = sample_transactions.drop(columns=["PIN Code"]).assign(
+        **{"Bank Gateway": "Gateway A"}
+    )
+    path = tmp_path / "prepared.csv"
+    prepared.to_csv(path, index=False)
+    with pytest.raises(DataValidationError, match="Simulation Version"):
+        data_loader.load_transactions(path, require_gateway=True)
+
+
 @pytest.mark.integration
 def test_load_transactions_parses_types_and_sorts_timestamps(
     sample_transactions,
@@ -57,6 +109,7 @@ def test_load_transactions_parses_types_and_sorts_timestamps(
     assert pd.api.types.is_datetime64_any_dtype(loaded["Timestamp"])
     assert pd.api.types.is_numeric_dtype(loaded["Transaction Amount"])
     assert pd.api.types.is_bool_dtype(loaded["Fraud Flag"])
+    assert "PIN Code" not in loaded
 
 
 @pytest.mark.integration

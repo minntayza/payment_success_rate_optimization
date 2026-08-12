@@ -4,6 +4,17 @@ set -euo pipefail
 
 repository_root="$(git rev-parse --show-toplevel)"
 revision="${1:-HEAD}"
+
+dirty_tree=false
+if ! git -C "${repository_root}" diff --quiet || \
+	[[ -n "$(git -C "${repository_root}" ls-files --others --exclude-standard)" ]]; then
+	dirty_tree=true
+fi
+if [[ "${dirty_tree}" == true && "${VERIFY_DIRTY:-0}" != 1 ]]; then
+	echo "Clean verification refuses a dirty working tree; commit or stash it first." >&2
+	echo "Set VERIFY_DIRTY=1 to verify an explicit working-tree snapshot." >&2
+	exit 2
+fi
 export_root="$(mktemp -d "${TMPDIR:-/tmp}/payment-dashboard-clean.XXXXXX")"
 environment_path="${export_root}/.venv"
 server_log="${export_root}/streamlit.log"
@@ -18,10 +29,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
-git -C "${repository_root}" archive "${revision}" | tar -x -C "${export_root}"
+if [[ "${dirty_tree}" == true ]]; then
+	(
+		cd "${repository_root}"
+		while IFS= read -r -d '' file; do
+			[[ -e "${file}" ]] && printf '%s\0' "${file}"
+		done < <(git ls-files --cached --others --exclude-standard -z) |
+			tar --null -T - -cf -
+	) | tar -x -C "${export_root}"
+else
+	git -C "${repository_root}" archive "${revision}" | tar -x -C "${export_root}"
+fi
 
-python3 -m venv "${environment_path}"
-"${environment_path}/bin/python" -m pip install --editable "${export_root}[dev]"
+(
+	cd "${export_root}"
+	uv sync --extra dev --frozen
+)
+environment_path="${export_root}/.venv"
 
 (
 	cd /tmp

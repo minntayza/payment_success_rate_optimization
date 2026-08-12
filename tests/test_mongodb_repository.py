@@ -419,6 +419,15 @@ def test_alert_cutoff_prefers_highest_transaction_ids_when_timestamps_tie() -> N
     }
 
 
+def test_alert_pipeline_excludes_recent_window_and_requires_reference_minimum() -> None:
+    pipeline = mongodb._alerts_pipeline()
+    serialized = repr(pipeline)
+    assert "baseline_success_count" in serialized
+    assert "baseline_count" in serialized
+    assert "$subtract" in serialized
+    assert str(mongodb.ALERT_BASELINE_MIN_SIZE) in serialized
+
+
 def test_document_number_window_uses_atlas_compatible_single_sort_key() -> None:
     """Atlas rejects $documentNumber when sortBy has multiple fields."""
     database = Database([_document("TX-1")])

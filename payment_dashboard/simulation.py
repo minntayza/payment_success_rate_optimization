@@ -43,7 +43,11 @@ def success_probabilities(frame: pd.DataFrame) -> pd.Series:
         + hour_adjustments
         + amount_adjustments
     )
-    return probabilities.clip(*SIMULATION_PROBABILITY_RANGE)
+    return pd.Series(
+        probabilities.clip(*SIMULATION_PROBABILITY_RANGE),
+        index=frame.index,
+        dtype=float,
+    )
 
 
 def simulate_transactions(

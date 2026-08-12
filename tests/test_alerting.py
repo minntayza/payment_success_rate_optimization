@@ -42,7 +42,7 @@ def test_exact_ten_point_drop_triggers():
     full = transactions("Gateway A", 70, 30, "F")
     replay = transactions("Gateway A", 30, 20, "R")
 
-    result = evaluate_alerts(full, replay).iloc[0]
+    result = evaluate_alerts(full, replay, window_size=50, baseline_min_size=1).iloc[0]
 
     assert result["baseline_rate"] == 0.7
     assert result["rolling_rate"] == 0.6
@@ -54,7 +54,7 @@ def test_less_than_ten_point_drop_does_not_trigger():
     full = transactions("Gateway A", 70, 30, "F")
     replay = transactions("Gateway A", 31, 19, "R")
 
-    result = evaluate_alerts(full, replay).iloc[0]
+    result = evaluate_alerts(full, replay, window_size=50, baseline_min_size=1).iloc[0]
 
     assert result["drop"] == 0.08
     assert bool(result["is_alert"]) is False
@@ -80,6 +80,7 @@ def test_latest_fifty_transactions_are_used():
     result = evaluate_alerts(
         full,
         pd.concat([older, latest], ignore_index=True),
+        baseline_min_size=1,
     ).iloc[0]
 
     assert result["rolling_rate"] == 0.5
@@ -105,3 +106,21 @@ def test_evaluate_alerts_returns_every_gateway():
         "Gateway C",
         "Gateway D",
     ]
+
+
+def test_overlapping_replay_excludes_recent_window_from_baseline():
+    history = transactions("Gateway A", 70, 30, "A")
+    result = evaluate_alerts(history, history, window_size=20).iloc[0]
+    assert result["baseline_count"] == 80
+    assert result["recent_count"] == 20
+
+
+def test_alert_requires_two_hundred_earlier_baseline_attempts() -> None:
+    insufficient = transactions("Gateway A", 200, 49, "I")
+    sufficient = transactions("Gateway A", 200, 50, "S")
+    insufficient_result = evaluate_alerts(insufficient, insufficient).iloc[0]
+    sufficient_result = evaluate_alerts(sufficient, sufficient).iloc[0]
+    assert insufficient_result["baseline_count"] == 199
+    assert bool(insufficient_result["has_sufficient_history"]) is False
+    assert sufficient_result["baseline_count"] == 200
+    assert bool(sufficient_result["has_sufficient_history"]) is True

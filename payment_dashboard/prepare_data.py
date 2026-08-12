@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -8,10 +10,30 @@ import numpy as np
 import pandas as pd
 
 from payment_dashboard.config import DEFAULT_SEED, GATEWAYS
-from payment_dashboard.data_loader import load_transactions, validate_transactions
+from payment_dashboard.data_loader import (
+    DataValidationError,
+    load_transactions,
+    validate_transactions,
+)
 from payment_dashboard.simulation import simulate_transactions
 
 log = logging.getLogger(__name__)
+
+
+def verify_source_manifest(source_path: Path, manifest_path: Path) -> None:
+    """Verify the source filename, row count, and SHA-256 provenance contract."""
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DataValidationError("Unable to read source manifest") from exc
+    if source_path.name != manifest.get("filename"):
+        raise DataValidationError("Source filename does not match manifest")
+    digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    if digest != manifest.get("sha256"):
+        raise DataValidationError("Source checksum does not match manifest")
+    row_count = len(pd.read_csv(source_path))
+    if row_count != int(manifest.get("rows", -1)):
+        raise DataValidationError("Source row count does not match manifest")
 
 
 def assign_gateways(
@@ -45,8 +67,12 @@ def main() -> None:
     )
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--manifest", type=Path, default=Path("data/source-manifest.json")
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args()
+    verify_source_manifest(args.input, args.manifest)
     prepare_file(args.input, args.output, args.seed)
     log.info("Prepared transactions written to %s", args.output)
 

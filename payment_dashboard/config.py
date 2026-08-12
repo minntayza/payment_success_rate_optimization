@@ -30,6 +30,7 @@ SIMULATION_PROBABILITY_RANGE = (0.55, 0.99)
 
 # Alert thresholds
 ALERT_WINDOW_SIZE = 50
+ALERT_BASELINE_MIN_SIZE = 200
 ALERT_THRESHOLD = 0.10  # 10 percentage points
 P95_QUANTILE = 0.95
 
@@ -45,6 +46,8 @@ CHART_COLORS = ["#2563EB", "#06B6D4", "#8B5CF6", "#F59E0B"]
 
 # Schema validation
 STATUSES = frozenset({SUCCESS_STATUS, FAILED_STATUS})
+TRANSACTION_TYPES = frozenset({"Transfer", "Deposit", "Withdrawal"})
+DEVICES = frozenset({"Mobile", "Desktop", "Tablet"})
 
 REQUIRED_COLUMNS = frozenset(
     {
@@ -61,6 +64,5 @@ REQUIRED_COLUMNS = frozenset(
         "Network Slice ID",
         "Latency (ms)",
         "Slice Bandwidth (Mbps)",
-        "PIN Code",
     }
 )

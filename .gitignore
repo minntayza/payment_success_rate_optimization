@@ -14,3 +14,4 @@ dist/
 *.egg-info/
 data/raw/*.csv
 data/processed/*.csv
+data/processed/routing_runs/

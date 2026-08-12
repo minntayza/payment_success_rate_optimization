@@ -21,6 +21,7 @@ from pymongo.errors import (
 
 from payment_dashboard.analytics import add_latency_band
 from payment_dashboard.config import (
+    ALERT_BASELINE_MIN_SIZE,
     ALERT_THRESHOLD,
     ALERT_WINDOW_SIZE,
     FAILED_STATUS,
@@ -51,8 +52,25 @@ COLUMN_MAP = {
     "network_slice_id": "Network Slice ID",
     "latency_ms": "Latency (ms)",
     "slice_bandwidth_mbps": "Slice Bandwidth (Mbps)",
-    "pin_code": "PIN Code",
     "bank_gateway": "Bank Gateway",
+}
+
+PUBLIC_TRANSACTION_PROJECTION = {
+    "_id": 0,
+    "transaction_id": 1,
+    "transaction_amount": 1,
+    "transaction_type": 1,
+    "transaction_timestamp": 1,
+    "transaction_status": 1,
+    "source_transaction_status": 1,
+    "simulation_version": 1,
+    "fraud_flag": 1,
+    "geolocation": 1,
+    "device_used": 1,
+    "network_slice_id": 1,
+    "latency_ms": 1,
+    "slice_bandwidth_mbps": 1,
+    "bank_gateway": 1,
 }
 
 
@@ -80,7 +98,7 @@ def create_resources_from_env() -> MongoResources | None:
     except ImportError:
         LOGGER.warning("PyMongo dependency is unavailable")
         return None
-    client = MongoClient(
+    client: Any = MongoClient(
         uri,
         serverSelectionTimeoutMS=3_000,
         connectTimeoutMS=3_000,
@@ -221,7 +239,7 @@ def _display_dashboard_pipeline(
                     },
                     {"$skip": (page.number - 1) * page.size},
                     {"$limit": page.size},
-                    {"$project": {"_id": 0}},
+                    {"$project": PUBLIC_TRANSACTION_PROJECTION},
                 ],
                 "total_count": [{"$count": "count"}],
             }
@@ -477,7 +495,6 @@ def _alerts_pipeline() -> list[dict[str, object]]:
         },
         {
             "$set": {
-                "baseline_rate": {"$divide": ["$success_count", "$transaction_count"]},
                 "rolling_count": {"$size": "$latest_statuses"},
                 "rolling_success_count": {
                     "$size": {
@@ -492,20 +509,51 @@ def _alerts_pipeline() -> list[dict[str, object]]:
         },
         {
             "$set": {
+                "baseline_count": {
+                    "$subtract": ["$transaction_count", "$rolling_count"]
+                },
+                "baseline_success_count": {
+                    "$subtract": ["$success_count", "$rolling_success_count"]
+                },
                 "has_sufficient_history": {
-                    "$gte": ["$rolling_count", ALERT_WINDOW_SIZE]
+                    "$and": [
+                        {"$gte": ["$rolling_count", ALERT_WINDOW_SIZE]},
+                        {
+                            "$gte": [
+                                {
+                                    "$subtract": [
+                                        "$transaction_count",
+                                        "$rolling_count",
+                                    ]
+                                },
+                                ALERT_BASELINE_MIN_SIZE,
+                            ]
+                        },
+                    ]
                 },
             }
         },
         {
             "$set": {
+                "baseline_rate": {
+                    "$cond": [
+                        "$has_sufficient_history",
+                        {
+                            "$divide": [
+                                "$baseline_success_count",
+                                "$baseline_count",
+                            ]
+                        },
+                        None,
+                    ]
+                },
                 "rolling_rate": {
                     "$cond": [
                         "$has_sufficient_history",
                         {"$divide": ["$rolling_success_count", "$rolling_count"]},
                         None,
                     ]
-                }
+                },
             }
         },
         {
@@ -529,6 +577,8 @@ def _alerts_pipeline() -> list[dict[str, object]]:
                 "_id": 0,
                 "Bank Gateway": "$_id",
                 "baseline_rate": 1,
+                "baseline_count": 1,
+                "recent_count": "$rolling_count",
                 "rolling_rate": 1,
                 "drop": 1,
                 "has_sufficient_history": 1,
@@ -589,6 +639,8 @@ def _alerts_frame(records: object) -> pd.DataFrame:
         "Bank Gateway",
         "baseline_rate",
         "rolling_rate",
+        "baseline_count",
+        "recent_count",
         "drop",
         "has_sufficient_history",
         "is_alert",
@@ -642,6 +694,9 @@ def _metadata_version(records: object) -> str:
 def documents_to_frame(documents: list[dict[str, object]]) -> pd.DataFrame:
     """Convert MongoDB documents to the established dashboard schema."""
     frame = pd.DataFrame(documents)
+    for private_field in ("sender_account_id", "receiver_account_id"):
+        if private_field not in frame:
+            frame[private_field] = "[redacted]"
     if "source_transaction_status" not in frame:
         frame["source_transaction_status"] = frame["transaction_status"]
     else:
@@ -655,7 +710,6 @@ def documents_to_frame(documents: list[dict[str, object]]) -> pd.DataFrame:
             LEGACY_SIMULATION_VERSION
         )
     frame = frame[list(COLUMN_MAP)].rename(columns=COLUMN_MAP)
-    frame["PIN Code"] = frame["PIN Code"].astype("string")
     validate_transactions(frame, require_gateway=True)
     frame["Timestamp"] = pd.to_datetime(frame["Timestamp"], utc=True).dt.tz_localize(
         None

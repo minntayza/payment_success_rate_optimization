@@ -2,14 +2,13 @@ PYTHON = .venv/bin/python
 PYTEST = $(PYTHON) -m pytest
 RUFF = .venv/bin/ruff
 
-.PHONY: help setup test test-unit test-integration test-live smoke lint format run prepare load-mongodb verify-clean clean
+.PHONY: help setup test test-unit test-integration test-live smoke lint format typecheck check run prepare load-mongodb verify-clean clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 setup:  ## Create venv and install dependencies
-	python3 -m venv .venv
-	$(PYTHON) -m pip install -e ".[dev]"
+	uv sync --extra dev --frozen
 
 test:  ## Run all tests
 	$(PYTEST) -q
@@ -32,6 +31,11 @@ lint:  ## Run ruff linter
 
 format:  ## Auto-format code with ruff
 	$(RUFF) format payment_dashboard/ tests/ scripts/
+
+typecheck:  ## Run strict static type checking
+	$(PYTHON) -m mypy payment_dashboard
+
+check: lint typecheck test  ## Run all offline quality gates
 
 run:  ## Start the Streamlit dashboard
 	$(PYTHON) -m streamlit run payment_dashboard/app.py
