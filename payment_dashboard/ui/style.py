@@ -14,11 +14,11 @@ PAGE_CSS = """
     --border: #24364B;
     --text: #F8FAFC;
     --muted: #94A3B8;
-    --accent: #38BDF8;
-    --accent-strong: #0EA5E9;
-    --success: #22C55E;
+    --accent: #22D3EE;
+    --accent-strong: #06B6D4;
+    --success: #34D399;
     --warning: #FBBF24;
-    --error: #F87171;
+    --critical: #FB7185;
     --radius-lg: 16px;
     --shadow-soft: 0 14px 34px rgba(0, 0, 0, 0.24);
 }
@@ -97,12 +97,12 @@ html, body, [class*="css"] {
     width: 13rem;
     height: 13rem;
     border-radius: 50%;
-    background: rgba(56, 189, 248, 0.12);
+    background: rgba(34, 211, 238, 0.12);
     content: "";
 }
 
 .playful-hero::before { top: -7rem; right: 8%; }
-.playful-hero::after { right: -5rem; bottom: -8rem; background: rgba(34, 197, 94, 0.08); }
+.playful-hero::after { right: -5rem; bottom: -8rem; background: rgba(52, 211, 153, 0.08); }
 .playful-hero h1, .playful-hero p { color: #ffffff !important; }
 .playful-hero h1 { max-width: 50rem; margin: 0.2rem 0 0.7rem; font-size: clamp(1.9rem, 4vw, 3.25rem); line-height: 1.15; }
 .hero-eyebrow { margin: 0; color: var(--accent) !important; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -122,7 +122,7 @@ html, body, [class*="css"] {
 }
 .status-success { border-color: var(--success); color: var(--success); }
 .status-warning { border-color: var(--warning); color: var(--warning); }
-.status-error { border-color: var(--error); color: var(--error); }
+.status-error { border-color: var(--critical); color: var(--critical); }
 
 .empty-state, .st-key-ai_brief_result {
     max-width: 44rem;
@@ -151,7 +151,7 @@ html, body, [class*="css"] {
     box-shadow: var(--shadow-soft);
 }
 .st-key-kpi_success [data-testid="stMetric"] { border-top-color: var(--success); }
-.st-key-kpi_failed [data-testid="stMetric"] { border-top-color: var(--error); }
+.st-key-kpi_failed [data-testid="stMetric"] { border-top-color: var(--critical); }
 .st-key-kpi_latency [data-testid="stMetric"] { border-top-color: var(--warning); }
 .kpi-icon { display: inline-grid; width: 2rem; height: 2rem; margin-bottom: 0.35rem; place-items: center; border-radius: 8px; background: #123047; color: var(--accent); font-size: 1.1rem; font-weight: 800; }
 [data-testid="stMetricLabel"], [data-testid="stMetricValue"] { color: var(--text) !important; }
@@ -192,9 +192,9 @@ select:focus-visible,
 
 [data-testid="stAlert"] { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); }
 [data-testid="stAlert"], [data-testid="stAlert"] p, [data-testid="stAlert"] li { color: var(--text) !important; }
-[data-testid="stNotificationContentSuccess"] { border-left: 5px solid #22C55E; background: #103B2A; }
-[data-testid="stNotificationContentInfo"] { border-left: 5px solid #38BDF8; background: #123047; }
-[data-testid="stNotificationContentError"] { border-left: 5px solid #F87171; background: #3B1D28; }
+[data-testid="stNotificationContentSuccess"] { border-left: 5px solid #34D399; background: #103B2A; }
+[data-testid="stNotificationContentInfo"] { border-left: 5px solid #22D3EE; background: #123047; }
+[data-testid="stNotificationContentError"] { border-left: 5px solid #FB7185; background: #3B1D28; }
 [data-testid="stNotificationContentWarning"] { border-left: 5px solid #FBBF24; background: #3D3215; }
 
 .st-key-ai_brief_card {
@@ -214,7 +214,7 @@ div[data-testid="stDataFrame"] { max-width: 100%; border: 1px solid var(--border
 [data-testid="stExpander"] { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 
 [data-testid="stVerticalBlockBorderWrapper"] { border-color: var(--border); border-radius: 10px; background: var(--surface); }
-[data-testid="stVerticalBlockBorderWrapper"]:has(input[aria-label="Language / ဘာသာစကား"]) { --language-accent: #38BDF8; border: 0; background: transparent; box-shadow: none; padding: 0; }
+[data-testid="stVerticalBlockBorderWrapper"]:has(input[aria-label="Language / ဘာသာစကား"]) { --language-accent: #22D3EE; border: 0; background: transparent; box-shadow: none; padding: 0; }
 [data-testid="stVerticalBlockBorderWrapper"]:has(input[aria-label="Language / ဘာသာစကား"]:checked) { --language-accent: #FBBF24; }
 [data-testid="stVerticalBlockBorderWrapper"]:has(input[aria-label="Language / ဘာသာစကား"]) label[data-baseweb="checkbox"] > div:first-child { background-color: var(--language-accent) !important; }
 [data-testid="stVerticalBlockBorderWrapper"]:has(input[aria-label="Language / ဘာသာစကား"]) [data-testid="stWidgetLabel"], [data-testid="stVerticalBlockBorderWrapper"]:has(input[aria-label="Language / ဘာသာစကား"]) [data-testid="stCaptionContainer"] { color: var(--text) !important; }

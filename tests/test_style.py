@@ -36,8 +36,19 @@ def _composite(base: str, overlay: tuple[int, int, int, float]) -> str:
 def test_page_css_uses_approved_dark_tokens() -> None:
     assert "--canvas: #07111F" in PAGE_CSS
     assert "--surface: #0D1B2A" in PAGE_CSS
+    assert "--accent: #22D3EE" in PAGE_CSS
+    assert "--success: #34D399" in PAGE_CSS
+    assert "--critical: #FB7185" in PAGE_CSS
     assert "prefers-reduced-motion: reduce" in PAGE_CSS
     assert "#fffaf4" not in PAGE_CSS.lower()
+
+
+def test_dark_palette_is_used_by_decorative_and_status_styles() -> None:
+    assert "background: rgba(34, 211, 238, 0.12);" in PAGE_CSS
+    assert "outline: 3px solid var(--accent) !important;" in PAGE_CSS
+    assert "border-left: 5px solid #34D399;" in PAGE_CSS
+    assert "border-left: 5px solid #FB7185;" in PAGE_CSS
+    assert "--language-accent: #22D3EE;" in PAGE_CSS
 
 
 def test_dark_theme_exposes_design_tokens_and_component_hooks() -> None:
@@ -46,7 +57,7 @@ def test_dark_theme_exposes_design_tokens_and_component_hooks() -> None:
         "--surface: #0D1B2A",
         "--text: #F8FAFC",
         "--muted: #94A3B8",
-        "--accent: #38BDF8",
+        "--accent: #22D3EE",
     ):
         assert token in PAGE_CSS
     for hook in (
@@ -70,7 +81,7 @@ def test_hero_normal_text_has_wcag_aa_contrast_across_background() -> None:
     assert gradient is not None
     tokens = re.findall(r"var\((--[\w-]+)\)|(#[0-9a-fA-F]{6})", gradient.group(1))
     backgrounds = [root_colors[name] if name else literal for name, literal in tokens]
-    decorative_overlays = ((56, 189, 248, 0.12), (34, 197, 94, 0.08))
+    decorative_overlays = ((34, 211, 238, 0.12), (52, 211, 153, 0.08))
 
     tested_backgrounds = backgrounds + [
         _composite(background, overlay)
@@ -80,8 +91,8 @@ def test_hero_normal_text_has_wcag_aa_contrast_across_background() -> None:
 
     assert tested_backgrounds
     assert min(_contrast_ratio("#ffffff", color) for color in tested_backgrounds) >= 4.5
-    assert "background: rgba(56, 189, 248, 0.12);" in PAGE_CSS
-    assert "background: rgba(34, 197, 94, 0.08);" in PAGE_CSS
+    assert "background: rgba(34, 211, 238, 0.12);" in PAGE_CSS
+    assert "background: rgba(52, 211, 153, 0.08);" in PAGE_CSS
 
 
 def test_dark_theme_has_two_and_one_column_layout_rules() -> None:
