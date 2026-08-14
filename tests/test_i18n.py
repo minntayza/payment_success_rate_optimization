@@ -78,6 +78,13 @@ def test_command_center_shell_copy_exists_in_both_languages() -> None:
         assert all(TRANSLATIONS[language][key].strip() for key in SHELL_KEYS)
 
 
+def test_command_center_destinations_use_the_exact_english_vocabulary() -> None:
+    """Navigation labels must match the approved command-center destinations."""
+    assert translate("shell.view.gateways") == "Gateways"
+    assert translate("shell.view.routing") == "Routing Lab"
+    assert translate("shell.view.admin") == "Admin"
+
+
 def test_simulation_disclosure_is_truthful_in_both_languages() -> None:
     english = translate("source.simulation_disclosure", "en", version="controlled-v1")
     myanmar = translate("source.simulation_disclosure", "my", version="controlled-v1")
