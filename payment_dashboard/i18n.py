@@ -23,6 +23,19 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "Academic demo · Gateway assignments and payment outcomes are "
             "controlled synthetic data, not real bank or gateway performance."
         ),
+        "shell.product_name": "Payment Command Center",
+        "shell.navigation": "Command center navigation",
+        "shell.view.overview": "Overview",
+        "shell.view.gateways": "Gateway health",
+        "shell.view.routing": "Routing",
+        "shell.view.transactions": "Transactions",
+        "shell.view.admin": "Administration",
+        "shell.reset_filters": "Reset filters",
+        "shell.view_description.overview": "Live payment health at a glance.",
+        "shell.view_description.gateways": "Compare gateway performance and alerts.",
+        "shell.view_description.routing": "Optimize payment routing decisions.",
+        "shell.view_description.transactions": "Inspect filtered payment activity.",
+        "shell.view_description.admin": "Manage dashboard access and payments.",
         "sidebar.controls": "Dashboard controls",
         "sidebar.replay_description": (
             "Browse chronological history, then narrow the visible analysis."
@@ -285,6 +298,21 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "ထိန်းချုပ်ဖန်တီးထားသော အတုဒေတာများဖြစ်ပြီး အမှန်တကယ် ဘဏ် သို့မဟုတ် "
             "gateway စွမ်းဆောင်ရည်ကို ကိုယ်စားမပြုပါ။"
         ),
+        "shell.product_name": "ငွေပေးချေမှု ကွပ်ကဲရေးစင်တာ",
+        "shell.navigation": "ကွပ်ကဲရေးစင်တာ လမ်းညွှန်",
+        "shell.view.overview": "အနှစ်ချုပ်",
+        "shell.view.gateways": "Gateway အခြေအနေ",
+        "shell.view.routing": "လမ်းကြောင်းရွေးချယ်မှု",
+        "shell.view.transactions": "ငွေပေးချေမှုများ",
+        "shell.view.admin": "စီမံခန့်ခွဲမှု",
+        "shell.reset_filters": "စစ်ထုတ်မှုများ ပြန်လည်သတ်မှတ်ရန်",
+        "shell.view_description.overview": "လက်ရှိ ငွေပေးချေမှု အခြေအနေကို တစ်ချက်ကြည့်ပါ။",
+        "shell.view_description.gateways": "Gateway စွမ်းဆောင်ရည်နှင့် သတိပေးချက်များကို နှိုင်းယှဉ်ပါ။",
+        "shell.view_description.routing": "ငွေပေးချေမှု လမ်းကြောင်းရွေးချယ်မှုကို အကောင်းဆုံးပြုလုပ်ပါ။",
+        "shell.view_description.transactions": (
+            "စစ်ထုတ်ထားသော ငွေပေးချေမှု လုပ်ဆောင်ချက်များကို စစ်ဆေးပါ။"
+        ),
+        "shell.view_description.admin": "ဒက်ရှ်ဘုတ် ဝင်ရောက်ခွင့်နှင့် ငွေပေးချေမှုများကို စီမံပါ။",
         "sidebar.controls": "Dashboard ထိန်းချုပ်မှုများ",
         "sidebar.replay_description": (
             "ငွေပေးချေမှုမှတ်တမ်းကို အချိန်စဉ်အတိုင်း ကြည့်ရှုပြီး မြင်ကွင်းခွဲခြမ်းမှုကို စစ်ထုတ်ပါ။"

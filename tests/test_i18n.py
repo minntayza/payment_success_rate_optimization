@@ -46,6 +46,22 @@ PLAYFUL_KEYS = {
     "pagination.summary",
 }
 
+SHELL_KEYS = {
+    "shell.product_name",
+    "shell.navigation",
+    "shell.view.overview",
+    "shell.view.gateways",
+    "shell.view.routing",
+    "shell.view.transactions",
+    "shell.view.admin",
+    "shell.reset_filters",
+    "shell.view_description.overview",
+    "shell.view_description.gateways",
+    "shell.view_description.routing",
+    "shell.view_description.transactions",
+    "shell.view_description.admin",
+}
+
 
 def test_translation_catalogs_have_matching_keys() -> None:
     assert set(TRANSLATIONS["en"]) == set(TRANSLATIONS["my"])
@@ -54,6 +70,12 @@ def test_translation_catalogs_have_matching_keys() -> None:
 def test_playful_dashboard_copy_exists_in_both_languages() -> None:
     for language in ("en", "my"):
         assert all(TRANSLATIONS[language][key].strip() for key in PLAYFUL_KEYS)
+
+
+def test_command_center_shell_copy_exists_in_both_languages() -> None:
+    """The navigation shell must remain fully bilingual as views are added."""
+    for language in ("en", "my"):
+        assert all(TRANSLATIONS[language][key].strip() for key in SHELL_KEYS)
 
 
 def test_simulation_disclosure_is_truthful_in_both_languages() -> None:
