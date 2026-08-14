@@ -186,6 +186,29 @@ def test_success_trend_localizes_every_visible_label(
 
 
 @pytest.mark.parametrize(
+    ("builder", "args"),
+    [
+        (gateway_success_chart, ()),
+        (gateway_volume_chart, ()),
+        (success_trend_chart, ()),
+        (failure_breakdown_chart, ("Latency Band", "Latency band")),
+    ],
+)
+def test_chart_constructors_apply_the_shared_dark_theme(
+    dashboard_fixture: pd.DataFrame,
+    builder: Callable[..., go.Figure],
+    args: tuple[str, ...],
+) -> None:
+    """Every reusable chart must share the same transparent command-center chrome."""
+    chart = builder(dashboard_fixture, *args)
+
+    assert chart.layout.paper_bgcolor == "rgba(0,0,0,0)"
+    assert chart.layout.plot_bgcolor == "rgba(0,0,0,0)"
+    assert chart.layout.font.color == "#F8FAFC"
+    assert chart.layout.xaxis.gridcolor == "#24364B"
+
+
+@pytest.mark.parametrize(
     ("dimension", "title", "burmese_dimension", "burmese_title"),
     [
         (

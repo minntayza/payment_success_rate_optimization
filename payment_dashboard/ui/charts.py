@@ -13,6 +13,7 @@ from payment_dashboard.analytics import (
 )
 from payment_dashboard.config import CHART_COLORS
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
+from payment_dashboard.ui.chart_theme import apply_chart_theme
 
 DIMENSION_KEYS = {
     "Bank Gateway": "dimensions.gateway",
@@ -45,7 +46,7 @@ def gateway_success_chart(
         text_auto=".1%",
     )
     chart.update_layout(showlegend=False, yaxis_tickformat=".0%")
-    return chart
+    return apply_chart_theme(chart)
 
 
 def gateway_volume_chart(
@@ -68,7 +69,7 @@ def gateway_volume_chart(
         text_auto=True,
     )
     chart.update_layout(showlegend=False)
-    return chart
+    return apply_chart_theme(chart)
 
 
 def success_trend_chart(
@@ -90,7 +91,7 @@ def success_trend_chart(
         },
     )
     chart.update_layout(yaxis_tickformat=".0%", yaxis_range=[0, 1])
-    return chart
+    return apply_chart_theme(chart)
 
 
 def failure_breakdown_chart(
@@ -119,7 +120,7 @@ def failure_breakdown_chart(
         text_auto=True,
     )
     chart.update_layout(showlegend=False)
-    return chart
+    return apply_chart_theme(chart)
 
 
 def _display_dimension(

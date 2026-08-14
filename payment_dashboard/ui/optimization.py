@@ -6,11 +6,13 @@ from collections.abc import Mapping
 from typing import cast
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.routing_models import OptimizationReport
 from payment_dashboard.routing_statistics import ConfidenceInterval
+from payment_dashboard.ui.chart_theme import apply_chart_theme
 
 
 def _policy_labels(language: Language) -> dict[str, str]:
@@ -191,11 +193,12 @@ def render_optimization_report(
             "realized_utility"
         ].cumsum()
         st.subheader(translate("optimization.cumulative_title", language))
-        st.line_chart(
-            ordered_decisions.set_index("timestamp")[
-                ["cumulative_expected_utility", "cumulative_realized_utility"]
-            ]
+        cumulative_chart = px.line(
+            ordered_decisions,
+            x="timestamp",
+            y=["cumulative_expected_utility", "cumulative_realized_utility"],
         )
+        st.plotly_chart(apply_chart_theme(cumulative_chart), width="stretch")
         st.subheader(translate("optimization.examples_title", language))
         st.dataframe(
             ordered_decisions[

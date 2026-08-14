@@ -20,6 +20,7 @@ from payment_dashboard.config import CHART_COLORS
 from payment_dashboard.dashboard_repository import DashboardFilters
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.models import DashboardSnapshot, DashboardState, DataSource
+from payment_dashboard.ui.chart_theme import apply_chart_theme
 from payment_dashboard.ui.charts import (
     FAILURE_DIMENSIONS,
     failure_breakdown_chart,
@@ -388,6 +389,7 @@ def render_gateway_performance(
             labels=labels,
         )
         success_chart.update_layout(showlegend=False, yaxis_tickformat=".0%")
+        apply_chart_theme(success_chart)
         volume_chart = px.bar(
             summary,
             x="Bank Gateway",
@@ -399,6 +401,7 @@ def render_gateway_performance(
             labels=labels,
         )
         volume_chart.update_layout(showlegend=False)
+        apply_chart_theme(volume_chart)
     else:
         data_frame = cast(pd.DataFrame, frame)
         success_chart = gateway_success_chart(data_frame, language=language)
@@ -425,6 +428,7 @@ def render_success_trend(
             labels=labels,
         )
         chart.update_layout(yaxis_tickformat=".0%", yaxis_range=[0, 1])
+        apply_chart_theme(chart)
     else:
         chart = success_trend_chart(cast(pd.DataFrame, frame), language=language)
     st.plotly_chart(chart, width="stretch")
@@ -453,6 +457,7 @@ def render_failure_analysis(
             labels=labels,
         )
         chart.update_layout(showlegend=False)
+        apply_chart_theme(chart)
         st.plotly_chart(chart, width="stretch")
         return
     columns = st.columns(2)

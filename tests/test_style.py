@@ -33,14 +33,20 @@ def _composite(base: str, overlay: tuple[int, int, int, float]) -> str:
     return "#" + "".join(f"{channel:02x}" for channel in channels)
 
 
-def test_playful_theme_exposes_design_tokens_and_component_hooks() -> None:
+def test_page_css_uses_approved_dark_tokens() -> None:
+    assert "--canvas: #07111F" in PAGE_CSS
+    assert "--surface: #0D1B2A" in PAGE_CSS
+    assert "prefers-reduced-motion: reduce" in PAGE_CSS
+    assert "#fffaf4" not in PAGE_CSS.lower()
+
+
+def test_dark_theme_exposes_design_tokens_and_component_hooks() -> None:
     for token in (
-        "--plum: #6c5ce7",
-        "--apricot: #ffb86c",
-        "--mint: #dff7eb",
-        "--rose: #ffe1e8",
-        "--ink: #2b2141",
-        "--canvas: #fffaf4",
+        "--canvas: #07111F",
+        "--surface: #0D1B2A",
+        "--text: #F8FAFC",
+        "--muted: #94A3B8",
+        "--accent: #38BDF8",
     ):
         assert token in PAGE_CSS
     for hook in (
@@ -49,6 +55,9 @@ def test_playful_theme_exposes_design_tokens_and_component_hooks() -> None:
         "kpi_success",
         "ai_brief_card",
         "ai_brief_result",
+        "status-success",
+        "status-warning",
+        "status-error",
     ):
         assert hook in PAGE_CSS
 
@@ -61,10 +70,7 @@ def test_hero_normal_text_has_wcag_aa_contrast_across_background() -> None:
     assert gradient is not None
     tokens = re.findall(r"var\((--[\w-]+)\)|(#[0-9a-fA-F]{6})", gradient.group(1))
     backgrounds = [root_colors[name] if name else literal for name, literal in tokens]
-    decorative_overlays = (
-        (15, 23, 42, 0.18),
-        (15, 23, 42, 0.12),
-    )
+    decorative_overlays = ((56, 189, 248, 0.12), (34, 197, 94, 0.08))
 
     tested_backgrounds = backgrounds + [
         _composite(background, overlay)
@@ -74,21 +80,21 @@ def test_hero_normal_text_has_wcag_aa_contrast_across_background() -> None:
 
     assert tested_backgrounds
     assert min(_contrast_ratio("#ffffff", color) for color in tested_backgrounds) >= 4.5
-    assert "background: rgba(15, 23, 42, 0.18);" in PAGE_CSS
-    assert "background: rgba(15, 23, 42, 0.12);" in PAGE_CSS
+    assert "background: rgba(56, 189, 248, 0.12);" in PAGE_CSS
+    assert "background: rgba(34, 197, 94, 0.08);" in PAGE_CSS
 
 
-def test_playful_theme_has_narrow_layout_rules() -> None:
+def test_dark_theme_has_two_and_one_column_layout_rules() -> None:
     assert "@media (max-width: 768px)" in PAGE_CSS
     assert "overflow-x: hidden" in PAGE_CSS
     assert '[data-testid="stHorizontalBlock"]:has(.st-key-kpi_transactions)' in PAGE_CSS
     assert '[data-testid="stColumn"]' in PAGE_CSS
+    assert "flex: 1 1 50%;" in PAGE_CSS
     assert "flex: 1 1 100%;" in PAGE_CSS
-    assert "min-width: 100%;" in PAGE_CSS
 
 
 def test_empty_state_bounds_and_integrates_mascot() -> None:
-    assert ".empty-state {" in PAGE_CSS
+    assert ".empty-state, .st-key-ai_brief_result {" in PAGE_CSS
     assert "text-align: center;" in PAGE_CSS
     assert ".empty-mascot {" in PAGE_CSS
     assert "width: 6rem;" in PAGE_CSS
@@ -116,9 +122,9 @@ def test_sidebar_language_control_keeps_its_text_high_contrast() -> None:
 def test_ai_brief_text_colors_are_scoped_to_result_container() -> None:
     assert ".st-key-ai_brief_result" in PAGE_CSS
     assert ".st-key-ai_brief_result p" in PAGE_CSS
-    assert "color: #1e293b !important;" in PAGE_CSS
+    assert "color: var(--text) !important;" in PAGE_CSS
     assert ".st-key-ai_brief_result h2" in PAGE_CSS
-    assert "color: #0f172a !important;" in PAGE_CSS
+    assert "color: var(--text) !important;" in PAGE_CSS
 
 
 def test_entire_ai_feature_has_purple_card_and_readable_text() -> None:
@@ -134,7 +140,7 @@ def test_entire_ai_feature_has_purple_card_and_readable_text() -> None:
 def test_alert_message_text_uses_high_contrast_color() -> None:
     assert '[data-testid="stAlert"]' in PAGE_CSS
     assert '[data-testid="stAlert"] p' in PAGE_CSS
-    assert "color: #0f172a !important;" in PAGE_CSS
+    assert "color: var(--text) !important;" in PAGE_CSS
 
 
 def test_alert_kinds_use_distinct_semantic_treatments() -> None:
@@ -163,7 +169,6 @@ def test_main_and_sidebar_text_use_explicit_high_contrast_colors() -> None:
     assert '[data-testid="stMain"] p' in PAGE_CSS
     assert '[data-testid="stMain"] [data-testid="stCaptionContainer"]' in PAGE_CSS
     assert '[data-testid="stMain"] h1' in PAGE_CSS
-    assert "color: #334155 !important;" in PAGE_CSS
-    assert "color: #0f172a !important;" in PAGE_CSS
+    assert "color: var(--text) !important;" in PAGE_CSS
     assert '[data-testid="stSidebar"] p' in PAGE_CSS
     assert "color: #ffffff !important;" in PAGE_CSS
