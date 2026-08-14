@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from types import SimpleNamespace
+from typing import cast
 
 import pandas as pd
 import pytest
@@ -102,6 +104,42 @@ def test_snapshot_failure_chart_localizes_myanmar_axes(
 
     assert charts[0].layout.xaxis.title.text == "တုံ့ပြန်ချိန် အပိုင်းအခြား"
     assert charts[0].layout.yaxis.title.text == "မအောင်မြင်သော"
+
+
+@pytest.mark.integration
+def test_snapshot_charts_accept_equivalent_streamlit_script_class(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_snapshot: DashboardSnapshot,
+) -> None:
+    """A script-loaded snapshot has the interface but a different class identity."""
+    script_snapshot = cast(
+        DashboardSnapshot,
+        SimpleNamespace(
+            gateway_summary=dashboard_snapshot.gateway_summary,
+            trend=dashboard_snapshot.trend,
+            failure_summary=dashboard_snapshot.failure_summary,
+        ),
+    )
+    charts: list[go.Figure] = []
+
+    class Column:
+        def plotly_chart(self, chart: go.Figure, **_kwargs: object) -> None:
+            charts.append(chart)
+
+    monkeypatch.setattr(sections.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections.st, "caption", lambda *_: None)
+    monkeypatch.setattr(sections.st, "columns", lambda _count: [Column(), Column()])
+    monkeypatch.setattr(
+        sections.st,
+        "plotly_chart",
+        lambda chart, **_kwargs: charts.append(chart),
+    )
+
+    render_gateway_performance(script_snapshot)
+    render_success_trend(script_snapshot)
+    render_failure_analysis(script_snapshot)
+
+    assert len(charts) == 4
 
 
 @pytest.mark.parametrize(

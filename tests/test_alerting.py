@@ -17,6 +17,7 @@ def transactions(
             "Transaction ID": [f"{prefix}{index}" for index in range(len(statuses))],
             "Bank Gateway": gateway,
             "Transaction Status": statuses,
+            "Timestamp": pd.date_range("2025-01-01", periods=len(statuses), freq="min"),
         }
     )
 
@@ -39,14 +40,15 @@ def test_calculate_baselines_uses_full_gateway_history():
 
 
 def test_exact_ten_point_drop_triggers():
-    full = transactions("Gateway A", 70, 30, "F")
-    replay = transactions("Gateway A", 30, 20, "R")
+    full = transactions("Gateway A", 200, 0, "F")
+    replay = transactions("Gateway A", 45, 5, "R")
 
-    result = evaluate_alerts(full, replay, window_size=50, baseline_min_size=1).iloc[0]
+    result = evaluate_alerts(full, replay, window_size=50).iloc[0]
 
-    assert result["baseline_rate"] == 0.7
-    assert result["rolling_rate"] == 0.6
+    assert result["baseline_rate"] == 1.0
+    assert result["rolling_rate"] == 0.9
     assert result["drop"] == 0.1
+    assert result["drop_ci_lower"] > 0
     assert bool(result["is_alert"]) is True
 
 
@@ -124,3 +126,28 @@ def test_alert_requires_two_hundred_earlier_baseline_attempts() -> None:
     assert bool(insufficient_result["has_sufficient_history"]) is False
     assert sufficient_result["baseline_count"] == 200
     assert bool(sufficient_result["has_sufficient_history"]) is True
+
+
+def test_alert_evidence_contains_non_overlapping_boundaries_and_interval() -> None:
+    history = transactions("Gateway A", 225, 25, "A")
+    result = evaluate_alerts(history, history).iloc[0]
+
+    assert result["baseline_count"] == 200
+    assert result["recent_count"] == 50
+    assert result["baseline_start"] == pd.Timestamp("2025-01-01 00:00:00Z")
+    assert result["baseline_end"] < result["recent_start"]
+    assert result["recent_end"] == pd.Timestamp("2025-01-01 04:09:00Z")
+    assert result["drop_ci_lower"] <= result["drop"] <= result["drop_ci_upper"]
+
+
+def test_practical_drop_without_statistical_support_does_not_alert() -> None:
+    baseline = transactions("Gateway A", 140, 60, "B")
+    recent = transactions("Gateway A", 30, 20, "R")
+    recent["Timestamp"] = recent["Timestamp"] + pd.offsets.Day(1)
+    history = pd.concat([baseline, recent], ignore_index=True)
+
+    result = evaluate_alerts(history, history).iloc[0]
+
+    assert result["drop"] == 0.1
+    assert result["drop_ci_lower"] < 0
+    assert bool(result["is_alert"]) is False

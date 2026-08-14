@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -305,6 +307,35 @@ def render_gateway_health(
         display[column] = display[column].map(
             lambda v: "—" if pd.isna(v) else f"{v:.1%}"
         )
+    display[translate("health.samples", language)] = display.apply(
+        lambda row: (
+            "—"
+            if pd.isna(row["baseline_count"]) or pd.isna(row["recent_count"])
+            else f"{int(row['baseline_count'])}/{int(row['recent_count'])}"
+        ),
+        axis=1,
+    )
+    display[translate("health.periods", language)] = display.apply(
+        lambda row: (
+            "—"
+            if pd.isna(row["baseline_start"]) or pd.isna(row["recent_start"])
+            else (
+                f"{pd.Timestamp(row['baseline_start']):%Y-%m-%d %H:%M}–"
+                f"{pd.Timestamp(row['baseline_end']):%Y-%m-%d %H:%M} / "
+                f"{pd.Timestamp(row['recent_start']):%Y-%m-%d %H:%M}–"
+                f"{pd.Timestamp(row['recent_end']):%Y-%m-%d %H:%M}"
+            )
+        ),
+        axis=1,
+    )
+    display[translate("health.interval", language)] = display.apply(
+        lambda row: (
+            "—"
+            if pd.isna(row["drop_ci_lower"])
+            else f"{row['drop_ci_lower']:.1%} to {row['drop_ci_upper']:.1%}"
+        ),
+        axis=1,
+    )
     display = display.rename(
         columns={
             "Bank Gateway": translate("table.gateway", language),
@@ -324,6 +355,9 @@ def render_gateway_health(
                 baseline_column,
                 latest_50_column,
                 drop_column,
+                translate("health.samples", language),
+                translate("health.periods", language),
+                translate("health.interval", language),
                 status_column,
             ]
         ],
@@ -339,7 +373,7 @@ def render_gateway_performance(
     """Render gateway success rate and volume charts side by side."""
     st.subheader(translate("charts.gateway_performance", language))
     left, right = st.columns(2)
-    if isinstance(frame, DashboardSnapshot):
+    if hasattr(frame, "gateway_summary"):
         summary = frame.gateway_summary
         labels = _snapshot_chart_labels(language)
         success_chart = px.bar(
@@ -366,8 +400,9 @@ def render_gateway_performance(
         )
         volume_chart.update_layout(showlegend=False)
     else:
-        success_chart = gateway_success_chart(frame, language=language)
-        volume_chart = gateway_volume_chart(frame, language=language)
+        data_frame = cast(pd.DataFrame, frame)
+        success_chart = gateway_success_chart(data_frame, language=language)
+        volume_chart = gateway_volume_chart(data_frame, language=language)
     left.plotly_chart(success_chart, width="stretch")
     right.plotly_chart(volume_chart, width="stretch")
 
@@ -378,7 +413,7 @@ def render_success_trend(
 ) -> None:
     """Render the success rate trend line chart."""
     st.subheader(translate("charts.success_trend", language))
-    if isinstance(frame, DashboardSnapshot):
+    if hasattr(frame, "trend"):
         labels = _snapshot_chart_labels(language)
         chart = px.line(
             frame.trend,
@@ -391,7 +426,7 @@ def render_success_trend(
         )
         chart.update_layout(yaxis_tickformat=".0%", yaxis_range=[0, 1])
     else:
-        chart = success_trend_chart(frame, language=language)
+        chart = success_trend_chart(cast(pd.DataFrame, frame), language=language)
     st.plotly_chart(chart, width="stretch")
 
 
@@ -402,7 +437,7 @@ def render_failure_analysis(
     """Render failure breakdown charts by four dimensions."""
     st.subheader(translate("sections.failure_analysis", language))
     st.caption(translate("sections.failure_analysis_description", language))
-    if isinstance(frame, DashboardSnapshot):
+    if hasattr(frame, "failure_summary"):
         labels = _snapshot_chart_labels(language)
         chart = px.bar(
             frame.failure_summary,
@@ -421,8 +456,9 @@ def render_failure_analysis(
         st.plotly_chart(chart, width="stretch")
         return
     columns = st.columns(2)
+    data_frame = cast(pd.DataFrame, frame)
     for index, (dimension, title) in enumerate(FAILURE_DIMENSIONS):
-        chart = failure_breakdown_chart(frame, dimension, title, language=language)
+        chart = failure_breakdown_chart(data_frame, dimension, title, language=language)
         columns[index % 2].plotly_chart(chart, width="stretch")
 
 

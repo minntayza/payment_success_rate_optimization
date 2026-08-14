@@ -105,6 +105,17 @@ def test_validation_rejects_negative_amount(values) -> None:
         validate_transaction(values)
 
 
+@pytest.mark.parametrize(
+    "field",
+    ("Transaction Amount", "Latency (ms)", "Slice Bandwidth (Mbps)"),
+)
+@pytest.mark.parametrize("value", (float("inf"), float("-inf")))
+def test_validation_rejects_infinite_numeric_values(values, field, value) -> None:
+    values[field] = value
+    with pytest.raises(TransactionValidationError, match="finite and non-negative"):
+        validate_transaction(values)
+
+
 def test_create_inserts_document_and_sanitized_audit(values) -> None:
     database = Database()
     create_transaction(database, values, PRINCIPAL)
@@ -117,6 +128,8 @@ def test_create_inserts_document_and_sanitized_audit(values) -> None:
     assert event["actor"] == "demo-admin"
     assert event["actor_role"] == "administrator"
     assert "pin_code" not in event["new_document"]
+    assert "changed_at" in event
+    assert "timestamp" not in event
 
 
 def test_mutation_and_audit_share_database_transaction(values) -> None:

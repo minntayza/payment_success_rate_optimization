@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-from payment_dashboard.admin_auth import hash_fingerprint, verify_password
+from payment_dashboard.admin_auth import (
+    clear_login_failures,
+    hash_fingerprint,
+    login_allowed,
+    record_failed_login,
+    verify_password,
+)
 from payment_dashboard.config import GATEWAYS
 from payment_dashboard.i18n import Language, translate
 from payment_dashboard.models import DataSource
@@ -24,39 +31,19 @@ from payment_dashboard.transaction_service import (
 )
 
 AUTH_STATE_KEY = "mongodb_admin_auth"
-LOGIN_FAILURES_KEY = "mongodb_admin_login_failures"
 AUTH_SESSION_DURATION = timedelta(minutes=30)
-LOGIN_COOLDOWN = timedelta(minutes=5)
-MAX_LOGIN_ATTEMPTS = 5
 
 
 def _clear_admin_session() -> None:
     st.session_state.pop(AUTH_STATE_KEY, None)
 
 
-def _login_allowed() -> bool:
-    state = st.session_state.get(LOGIN_FAILURES_KEY)
-    if not isinstance(state, dict):
-        return True
-    locked_until = state.get("locked_until")
-    if not isinstance(locked_until, str):
-        return True
-    if pd.Timestamp(locked_until).to_pydatetime() <= datetime.now(UTC):
-        st.session_state.pop(LOGIN_FAILURES_KEY, None)
-        return True
-    return False
+def _login_allowed(database: Any, password_hash: str) -> bool:
+    return login_allowed(database, hash_fingerprint(password_hash))
 
 
-def _record_failed_login() -> None:
-    state = st.session_state.get(LOGIN_FAILURES_KEY)
-    attempts = int(state.get("attempts", 0)) + 1 if isinstance(state, dict) else 1
-    locked_until = None
-    if attempts >= MAX_LOGIN_ATTEMPTS:
-        locked_until = (datetime.now(UTC) + LOGIN_COOLDOWN).isoformat()
-    st.session_state[LOGIN_FAILURES_KEY] = {
-        "attempts": attempts,
-        "locked_until": locked_until,
-    }
+def _record_failed_login(database: Any, password_hash: str) -> None:
+    record_failed_login(database, hash_fingerprint(password_hash))
 
 
 def _is_authenticated(password_hash: str) -> bool:
@@ -209,8 +196,8 @@ def _transaction_form(prefix: str, values: dict[str, object]) -> dict[str, objec
     }
 
 
-def _render_login(password_hash: str, language: Language) -> None:
-    if not _login_allowed():
+def _render_login(database: Any, password_hash: str, language: Language) -> None:
+    if not _login_allowed(database, password_hash):
         st.error("Too many failed login attempts. Try again in five minutes.")
         return
     with st.form("admin_login"):
@@ -218,18 +205,18 @@ def _render_login(password_hash: str, language: Language) -> None:
         submitted = st.form_submit_button(translate("admin.login", language))
     if submitted:
         if verify_password(password, password_hash):
-            st.session_state.pop(LOGIN_FAILURES_KEY, None)
+            clear_login_failures(database, hash_fingerprint(password_hash))
             st.session_state[AUTH_STATE_KEY] = {
                 "authenticated": True,
                 "fingerprint": hash_fingerprint(password_hash),
-                "subject": "demo-admin",
+                "subject": os.getenv("ADMIN_SUBJECT", "shared-demo-admin"),
                 "role": "administrator",
                 "authenticated_at": datetime.now(UTC).isoformat(),
                 "expires_at": (datetime.now(UTC) + AUTH_SESSION_DURATION).isoformat(),
             }
             st.rerun()
         else:
-            _record_failed_login()
+            _record_failed_login(database, password_hash)
             st.error(translate("admin.login_failed", language))
 
 
@@ -265,7 +252,11 @@ def _render_manager(
             st.info(translate("admin.no_transactions_delete", language))
         return changed
     with edit_tab:
-        selected = st.selectbox(translate("admin.choose", language), ids, key="edit_id")
+        selected = st.selectbox(
+            translate("admin.choose", language),
+            ids,
+            key="edit_transaction_selector",
+        )
         row = frame.loc[frame["Transaction ID"].astype(str).eq(selected)].iloc[0]
         with st.form("edit_transaction"):
             values = _transaction_form("edit", _row_values(row))
@@ -302,7 +293,7 @@ def render_admin_panel(
         return False
     with st.expander(translate("admin.title", language)):
         if not _is_authenticated(password_hash):
-            _render_login(password_hash, language)
+            _render_login(database, password_hash, language)
             return False
         try:
             return _render_manager(database, frame, language, _principal())

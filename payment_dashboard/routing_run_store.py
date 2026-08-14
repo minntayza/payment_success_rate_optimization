@@ -85,12 +85,17 @@ class RoutingRunStore:
                 raise ValueError(f"Artifact digest mismatch: {name}")
             frames[name] = pd.read_csv(path)
         contexts = frames["contexts"]
-        if "Timestamp" in contexts:
-            contexts["Timestamp"] = pd.to_datetime(contexts["Timestamp"])
+        for column in ("Timestamp", "Benchmark Timestamp"):
+            if column in contexts:
+                contexts[column] = pd.to_datetime(contexts[column], utc=True)
+        candidates = frames["candidates"]
+        for column in ("timestamp", "source_timestamp"):
+            if column in candidates:
+                candidates[column] = pd.to_datetime(candidates[column], utc=True)
         return PersistedBenchmarkRun(
             manifest,
             contexts,
-            frames["candidates"],
+            candidates,
             frames["outcomes"],
             frames["report"],
         )

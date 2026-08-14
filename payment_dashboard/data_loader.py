@@ -85,6 +85,10 @@ def validate_prepared_transactions(frame: pd.DataFrame) -> None:
     versions = frame["Simulation Version"]
     if versions.isna().any() or versions.astype(str).str.strip().eq("").any():
         raise DataValidationError("Simulation Version must be non-empty")
+    if versions.astype(str).nunique() != 1:
+        raise DataValidationError(
+            "Prepared data must contain exactly one Simulation Version"
+        )
 
 
 def validate_transactions(

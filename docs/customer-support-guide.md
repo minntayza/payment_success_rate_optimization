@@ -34,7 +34,8 @@ values. They are not evidence that a real bank processed the transaction.
 ## Alert interpretation
 
 An alert means the gateway's latest 50 active transactions are at least 10
-percentage points below its success rate across the complete prepared dataset.
+percentage points below its success rate across the earlier active history. The
+latest monitoring window is excluded from the baseline.
 
 For example:
 

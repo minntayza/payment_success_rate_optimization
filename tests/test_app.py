@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 import streamlit as st
+from pymongo.errors import ConnectionFailure
 from pytest import MonkeyPatch, fixture
 from streamlit.testing.v1 import AppTest
 
@@ -291,6 +292,78 @@ def test_load_snapshot_does_not_create_indexes_during_interactive_reads(
     result = app_module._load_snapshot(DashboardFilters(), PageRequest())
 
     assert result is snapshot
+
+
+def test_live_optimization_uses_full_mongodb_history(
+    monkeypatch: MonkeyPatch,
+    sample_transactions: pd.DataFrame,
+) -> None:
+    expected = dashboard_fixture(sample_transactions)
+    snapshot = replace(
+        PandasDashboardRepository(expected).fetch(DashboardFilters(), PageRequest()),
+        source=DataSource.LIVE,
+    )
+    repository = MagicMock()
+    repository.fetch_routing_contexts.return_value = expected
+    resources = app_module.MongoResources(object(), object())
+    monkeypatch.setattr(app_module, "_mongo_resources", lambda *_: resources)
+    monkeypatch.setattr(app_module, "MongoDashboardRepository", lambda *_: repository)
+    monkeypatch.setattr(
+        app_module,
+        "_load_demo_frame",
+        lambda *_: pytest.fail("live optimization must not read demo data"),
+    )
+
+    frame, source_label = app_module._load_optimization_contexts(snapshot, "en")
+
+    pd.testing.assert_frame_equal(frame, expected)
+    assert source_label == "full active MongoDB transaction history"
+    repository.fetch_routing_contexts.assert_called_once_with()
+
+
+def test_demo_optimization_uses_the_same_local_source(
+    monkeypatch: MonkeyPatch,
+    sample_transactions: pd.DataFrame,
+) -> None:
+    expected = dashboard_fixture(sample_transactions)
+    snapshot = PandasDashboardRepository(expected).fetch(
+        DashboardFilters(), PageRequest()
+    )
+    monkeypatch.setattr(app_module, "_load_demo_frame", lambda *_: expected)
+    monkeypatch.setattr(
+        app_module,
+        "_mongo_resources",
+        lambda *_: pytest.fail("demo optimization must not query MongoDB"),
+    )
+
+    frame, source_label = app_module._load_optimization_contexts(snapshot, "en")
+
+    pd.testing.assert_frame_equal(frame, expected)
+    assert source_label == "validated local/demo transaction history"
+
+
+def test_live_optimization_read_failure_does_not_fall_back_to_demo(
+    monkeypatch: MonkeyPatch,
+    sample_transactions: pd.DataFrame,
+) -> None:
+    expected = dashboard_fixture(sample_transactions)
+    snapshot = replace(
+        PandasDashboardRepository(expected).fetch(DashboardFilters(), PageRequest()),
+        source=DataSource.LIVE,
+    )
+    repository = MagicMock()
+    repository.fetch_routing_contexts.side_effect = ConnectionFailure("unavailable")
+    resources = app_module.MongoResources(object(), object())
+    monkeypatch.setattr(app_module, "_mongo_resources", lambda *_: resources)
+    monkeypatch.setattr(app_module, "MongoDashboardRepository", lambda *_: repository)
+    monkeypatch.setattr(
+        app_module,
+        "_load_demo_frame",
+        lambda *_: pytest.fail("live failures must not fall back to demo data"),
+    )
+
+    with pytest.raises(ConnectionFailure):
+        app_module._load_optimization_contexts(snapshot, "en")
 
 
 def test_database_retry_clears_both_streamlit_caches_and_reruns(

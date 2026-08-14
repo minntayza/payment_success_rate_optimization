@@ -6,7 +6,10 @@ from dataclasses import asdict
 
 import pandas as pd
 
-from payment_dashboard.routing_config import DEFAULT_WEIGHT_GRID
+from payment_dashboard.routing_config import (
+    BENCHMARK_TIMESTAMP_COLUMN,
+    DEFAULT_WEIGHT_GRID,
+)
 from payment_dashboard.routing_models import (
     AllocationResult,
     ObjectiveWeights,
@@ -18,7 +21,7 @@ from payment_dashboard.routing_models import (
 from payment_dashboard.routing_optimizer import optimize_routes
 from payment_dashboard.routing_policies import (
     route_best_static,
-    route_greedy_success,
+    route_greedy_utility,
     route_random,
     route_round_robin,
 )
@@ -27,9 +30,11 @@ from payment_dashboard.routing_statistics import block_bootstrap_policy_differen
 
 def chronological_split(contexts: pd.DataFrame) -> dict[str, pd.Index]:
     ordered = contexts.sort_values(
-        ["Timestamp", "Transaction ID"], kind="stable"
-    ).reset_index(drop=True)
-    buckets = pd.to_datetime(ordered["Timestamp"], utc=True).dt.floor("h")
+        [BENCHMARK_TIMESTAMP_COLUMN, "Transaction ID"], kind="stable"
+    )
+    buckets = pd.to_datetime(ordered[BENCHMARK_TIMESTAMP_COLUMN], utc=True).dt.floor(
+        "h"
+    )
     unique_buckets = buckets.drop_duplicates().reset_index(drop=True)
     if len(unique_buckets) < 3:
         raise ValueError("Routing evaluation requires at least three time buckets")
@@ -108,22 +113,19 @@ def select_objective_weights(
     outcomes: pd.DataFrame,
     grid: tuple[ObjectiveWeights, ...],
 ) -> WeightSelection:
-    """Select weights on validation outcomes using one fixed business score."""
+    """Select weights on expected validation utility using one business score."""
     if not grid:
         raise ValueError("Objective weight grid must not be empty")
+    del outcomes
     business_weights = ObjectiveWeights()
     scores: list[tuple[ObjectiveWeights, float]] = []
     for weights in grid:
         result = optimize_routes(candidates, weights)
-        evaluated = result.decisions.merge(
-            outcomes,
-            on=["transaction_id", "gateway_id"],
-            validate="one_to_one",
-        )
+        evaluated = result.decisions
         score = float(
             (
                 business_weights.success_value
-                * evaluated["realized_success"].astype(float)
+                * evaluated["expected_success_probability"]
                 - business_weights.fee_weight * evaluated["expected_fee"]
                 - business_weights.latency_weight * evaluated["expected_latency_ms"]
             ).sum()
@@ -132,6 +134,21 @@ def select_objective_weights(
         scores.append((weights, score))
     selected = max(enumerate(scores), key=lambda item: (item[1][1], -item[0]))[1][0]
     return WeightSelection(selected, tuple(scores))
+
+
+def select_static_gateway(
+    development: pd.DataFrame,
+    weights: ObjectiveWeights,
+) -> str:
+    """Choose one preferred gateway by mean expected business utility."""
+    scored = development.assign(
+        _utility=(
+            weights.success_value * development["expected_success_probability"]
+            - weights.fee_weight * development["expected_fee"]
+            - weights.latency_weight * development["expected_latency_ms"]
+        )
+    )
+    return str(scored.groupby("gateway_id")["_utility"].mean().idxmax())
 
 
 def evaluate_all_policies(
@@ -171,16 +188,12 @@ def evaluate_all_policies(
     development = benchmark.candidates.loc[
         benchmark.candidates["transaction_id"].isin(development_ids)
     ]
-    static_gateway = str(
-        development.groupby("gateway_id")["expected_success_probability"]
-        .mean()
-        .idxmax()
-    )
+    static_gateway = select_static_gateway(development, selected_weights)
     results = [
         route_random(candidates),
         route_round_robin(candidates),
         route_best_static(candidates, static_gateway),
-        route_greedy_success(candidates),
+        route_greedy_utility(candidates, selected_weights),
         optimize_routes(candidates, selected_weights),
     ]
     metrics: dict[str, PolicyMetrics] = {}
@@ -197,7 +210,7 @@ def evaluate_all_policies(
     boundaries = {}
     for name, indices in split.items():
         timestamps = pd.to_datetime(
-            benchmark.contexts.loc[indices, "Timestamp"], utc=True
+            benchmark.contexts.loc[indices, BENCHMARK_TIMESTAMP_COLUMN], utc=True
         )
         boundaries[name] = (timestamps.min(), timestamps.max())
     optimizer_result = next(
@@ -212,8 +225,6 @@ def evaluate_all_policies(
         )
         for baseline in results
         if baseline.policy_name != "milp_optimizer"
-        and set(decisions[baseline.policy_name]["time_bucket"])
-        == set(decisions["milp_optimizer"]["time_bucket"])
     }
     return OptimizationReport(
         metrics,

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import isfinite
 from typing import Any
 
 import pandas as pd
@@ -73,12 +74,10 @@ def validate_transaction(values: dict[str, object]) -> dict[str, object]:
             number = float(str(values[field]))
         except ValueError as exc:
             raise TransactionValidationError(
-                f"{field} must be numeric and non-negative"
+                f"{field} must be finite and non-negative"
             ) from exc
-        if not pd.notna(number) or number < 0:
-            raise TransactionValidationError(
-                f"{field} must be numeric and non-negative"
-            )
+        if not pd.notna(number) or not isfinite(number) or number < 0:
+            raise TransactionValidationError(f"{field} must be finite and non-negative")
     try:
         timestamp = pd.Timestamp(str(values["Timestamp"]))
     except (TypeError, ValueError) as exc:
@@ -104,10 +103,30 @@ def validate_transaction(values: dict[str, object]) -> dict[str, object]:
     return payload
 
 
-def _sanitized(document: dict[str, object] | None) -> dict[str, object] | None:
+AUDIT_PROHIBITED_FIELDS = frozenset(
+    {
+        "_id",
+        "pin_code",
+        "PIN Code",
+        "sender_account_id",
+        "receiver_account_id",
+        "Sender Account ID",
+        "Receiver Account ID",
+    }
+)
+
+
+def sanitize_audit_document(
+    document: Mapping[str, object] | None,
+) -> dict[str, object] | None:
+    """Return a defensive audit snapshot without prohibited identifiers."""
     if document is None:
         return None
-    return {key: value for key, value in document.items() if key != "_id"}
+    return {
+        str(key): value
+        for key, value in document.items()
+        if str(key) not in AUDIT_PROHIBITED_FIELDS
+    }
 
 
 def _audit(
@@ -127,8 +146,8 @@ def _audit(
             "actor": principal.subject,
             "actor_role": principal.role,
             "changed_at": datetime.now(UTC),
-            "old_document": _sanitized(old_document),
-            "new_document": _sanitized(new_document),
+            "old_document": sanitize_audit_document(old_document),
+            "new_document": sanitize_audit_document(new_document),
         },
         **options,
     )

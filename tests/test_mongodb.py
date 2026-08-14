@@ -7,6 +7,7 @@ import pytest
 from pymongo.errors import OperationFailure
 
 from payment_dashboard import mongodb
+from payment_dashboard.data_loader import DataValidationError
 from payment_dashboard.simulation import SIMULATION_VERSION
 
 
@@ -64,20 +65,16 @@ def test_documents_to_frame_redacts_accounts_omitted_by_public_projection() -> N
     assert frame.loc[0, "Receiver Account ID"] == "[redacted]"
 
 
-def test_documents_to_frame_supports_mixed_legacy_and_simulated_documents() -> None:
+def test_documents_to_frame_rejects_mixed_legacy_and_simulated_documents() -> None:
     simulated = _document()
     legacy = _document()
     legacy.update({"transaction_id": "TX-2", "transaction_status": "Failed"})
     legacy.pop("source_transaction_status")
     legacy.pop("simulation_version")
 
-    frame = mongodb.documents_to_frame([simulated, legacy])
+    with pytest.raises(DataValidationError, match="exactly one Simulation Version"):
+        mongodb.documents_to_frame([simulated, legacy])
 
-    result = frame.set_index("Transaction ID")
-    assert result.loc["TX-1", "Source Transaction Status"] == "Success"
-    assert result.loc["TX-1", "Simulation Version"] == SIMULATION_VERSION
-    assert result.loc["TX-2", "Source Transaction Status"] == "Failed"
-    assert result.loc["TX-2", "Simulation Version"] == "legacy-v0"
     assert "source_transaction_status" not in legacy
     assert "simulation_version" not in legacy
 

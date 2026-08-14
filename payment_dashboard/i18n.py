@@ -122,6 +122,9 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "health.baseline": "Baseline",
         "health.latest_50": "Latest 50",
         "health.drop": "Drop",
+        "health.samples": "Samples (baseline/recent)",
+        "health.periods": "Compared periods (UTC)",
+        "health.interval": "95% drop interval",
         "charts.gateway_performance": "Gateway performance",
         "charts.success_rate_by_gateway": "Success rate by gateway",
         "charts.transaction_volume_by_gateway": "Transaction volume by gateway",
@@ -149,8 +152,8 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "table.recent_transactions": "Recent transactions",
         "guide.title": "How to interpret this dashboard",
         "guide.content": (
-            "- **Baseline** is each gateway's success rate across the complete "
-            "dataset.\n"
+            "- **Baseline** is each gateway's success rate across active history "
+            "strictly before the latest-50 window.\n"
             "- **Latest 50** is the gateway's success rate in its newest 50 active "
             "transactions.\n"
             "- **Drop** is baseline minus latest-50 performance.\n"
@@ -166,6 +169,78 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "Generate the prepared dataset with "
             "`python -m payment_dashboard.prepare_data` and refresh this page."
         ),
+        "optimization.eyebrow": "SYNTHETIC BENCHMARK",
+        "optimization.assumptions": (
+            "Gateway alternatives, outcomes, fees, latency, incidents, and capacity "
+            "are controlled simulation assumptions—not measurements of real processors."
+        ),
+        "optimization.timeline": (
+            "The routing evaluation uses a synthetic timeline; source transaction "
+            "timestamps remain unchanged and separate."
+        ),
+        "optimization.run_source": "Run ID: {run_id}. Source: {source}.",
+        "optimization.title": "Payment routing optimization",
+        "optimization.summary": (
+            "**Optimizer expected utility:** {utility:,.1f}  |  "
+            "**Realized success:** {success:.1%}  |  "
+            "**Random realized success:** {random:.1%}"
+        ),
+        "optimization.constraints": (
+            "**Binding-capacity buckets:** {binding}  |  "
+            "**Infeasible buckets:** {infeasible}  |  "
+            "**Unassigned transactions:** {unassigned}"
+        ),
+        "optimization.greedy_advantage": (
+            "**MILP expected-utility advantage over greedy:** {advantage:,.1f}"
+        ),
+        "optimization.change_title": "Change from baselines",
+        "optimization.period_title": "Normal and degraded-period evidence",
+        "optimization.utilization_title": "Optimizer gateway utilization",
+        "optimization.cumulative_title": "Chronological cumulative utility",
+        "optimization.examples_title": "Example optimizer decisions",
+        "optimization.uncertainty_title": "Realized-utility uncertainty",
+        "optimization.sensitivity_title": "Within-simulator sensitivity evidence",
+        "optimization.outcome_sensitivity": "Outcome redraw sensitivity",
+        "optimization.allocation_sensitivity": "Probability rerouting sensitivity",
+        "optimization.sensitivity_caption": (
+            "Seed and ±3-point probability stress tests measure robustness only "
+            "inside the hand-authored simulator; they are not real gateway evidence."
+        ),
+        "optimization.objective": (
+            "Objective: {success:g}×success probability − {fee:g}×fee − "
+            "{latency:g}×latency. Version: {version}."
+        ),
+        "optimization.test_period": (
+            "Test period: {start} through {end} (complete UTC buckets)."
+        ),
+        "optimization.uncertainty_caption": (
+            "95% intervals use a paired circular moving-block bootstrap over "
+            "chronological test buckets. Missing policy buckets are aligned to zero."
+        ),
+        "optimization.no_intervals": (
+            "Realized comparisons require uncertainty intervals before use."
+        ),
+        "optimization.policy.uniform_random": "Uniform random",
+        "optimization.policy.round_robin": "Round robin",
+        "optimization.policy.best_static": "Best static gateway",
+        "optimization.policy.greedy_utility": "Greedy utility",
+        "optimization.policy.milp_optimizer": "Constrained MILP optimizer",
+        "optimization.column.policy": "Policy",
+        "optimization.column.sample_size": "Sample size",
+        "optimization.column.success_rate": "Success rate",
+        "optimization.column.total_fee": "Total fee",
+        "optimization.column.average_latency": "Average latency (ms)",
+        "optimization.column.expected_utility": "Expected utility",
+        "optimization.column.baseline": "Baseline",
+        "optimization.column.estimate": "Estimate",
+        "optimization.column.lower": "Lower 95%",
+        "optimization.column.upper": "Upper 95%",
+        "optimization.column.includes_zero": "Includes zero",
+        "optimization.column.normal_success": "Normal success rate",
+        "optimization.column.degraded_success": "Degraded success rate",
+        "optimization.column.degraded_transactions": "Degraded transactions",
+        "optimization.column.feasible_buckets": "Feasible buckets",
+        "optimization.column.infeasible_buckets": "Infeasible buckets",
         "admin.title": "Administrator transaction manager",
         "admin.fallback_disabled": (
             "Database editing is unavailable while demo fallback data is active."
@@ -298,6 +373,9 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "health.baseline": "အခြေခံနှုန်း",
         "health.latest_50": "နောက်ဆုံး ၅၀",
         "health.drop": "လျော့ကျမှု",
+        "health.samples": "နမူနာ (အခြေခံ/လတ်တလော)",
+        "health.periods": "နှိုင်းယှဉ်ကာလ (UTC)",
+        "health.interval": "လျော့ကျမှု ၉၅% interval",
         "charts.gateway_performance": "Gateway စွမ်းဆောင်ရည်",
         "charts.success_rate_by_gateway": "ဂိတ်ဝေးအလိုက် အောင်မြင်နှုန်း",
         "charts.transaction_volume_by_gateway": "ဂိတ်ဝေးအလိုက် ငွေပေးချေမှုပမာဏ",
@@ -325,7 +403,8 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
         "table.recent_transactions": "နောက်ဆုံး ငွေပေးချေမှုများ",
         "guide.title": "ဤ dashboard ကို နားလည်ရန်",
         "guide.content": (
-            "- **အခြေခံနှုန်း** သည် dataset တစ်ခုလုံးရှိ gateway တစ်ခုစီ၏ အောင်မြင်နှုန်းဖြစ်သည်။\n"
+            "- **အခြေခံနှုန်း** သည် နောက်ဆုံး ၅၀ window မတိုင်မီ active history ရှိ "
+            "gateway တစ်ခုစီ၏ အောင်မြင်နှုန်းဖြစ်သည်။\n"
             "- **နောက်ဆုံး ၅၀** သည် အသုံးပြုနေသော မှတ်တမ်းထဲမှ နောက်ဆုံး ငွေပေးချေမှု ၅၀ ခု၏ "
             "အောင်မြင်နှုန်းဖြစ်သည်။\n"
             "- **လျော့ကျမှု** သည် အခြေခံနှုန်းမှ နောက်ဆုံး ၅၀ ၏ စွမ်းဆောင်ရည်ကို နုတ်ထားခြင်းဖြစ်သည်။\n"
@@ -341,6 +420,76 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "`python -m payment_dashboard.prepare_data` ဖြင့် ပြင်ဆင်ထားသော dataset ကို "
             "ဖန်တီးပြီး ဤစာမျက်နှာကို ပြန်လည်ဖွင့်ပါ။"
         ),
+        "optimization.eyebrow": "ဖန်တီးထားသော စမ်းသပ် benchmark",
+        "optimization.assumptions": (
+            "Gateway ရွေးချယ်မှု၊ ရလဒ်၊ ကုန်ကျစရိတ်၊ တုံ့ပြန်ချိန်၊ incident နှင့် "
+            "capacity များသည် ထိန်းချုပ်ဖန်တီးထားသော ယူဆချက်များသာဖြစ်သည်။"
+        ),
+        "optimization.timeline": (
+            "Routing အကဲဖြတ်မှုသည် ဖန်တီးထားသော အချိန်စဉ်ကို အသုံးပြုပြီး "
+            "မူရင်း transaction အချိန်များကို မပြောင်းလဲပါ။"
+        ),
+        "optimization.run_source": "Run ID: {run_id}။ ဒေတာရင်းမြစ်: {source}။",
+        "optimization.title": "ငွေပေးချေမှု routing အကောင်းဆုံးဖြစ်စေရေး",
+        "optimization.summary": (
+            "**Optimizer မျှော်မှန်း utility:** {utility:,.1f}  |  "
+            "**လက်တွေ့အောင်မြင်နှုန်း:** {success:.1%}  |  "
+            "**ကျပန်းမူ အောင်မြင်နှုန်း:** {random:.1%}"
+        ),
+        "optimization.constraints": (
+            "**Capacity ပြည့်သည့် bucket:** {binding}  |  "
+            "**မဖြေရှင်းနိုင်သည့် bucket:** {infeasible}  |  "
+            "**မသတ်မှတ်နိုင်သည့် transaction:** {unassigned}"
+        ),
+        "optimization.greedy_advantage": (
+            "**Greedy ထက် MILP ၏ မျှော်မှန်း utility အားသာချက်:** {advantage:,.1f}"
+        ),
+        "optimization.change_title": "အခြေခံ policy များနှင့် ကွာခြားမှု",
+        "optimization.period_title": "ပုံမှန်နှင့် ချို့ယွင်းကာလ အထောက်အထား",
+        "optimization.utilization_title": "Optimizer gateway အသုံးချမှု",
+        "optimization.cumulative_title": "အချိန်စဉ်အလိုက် စုစုပေါင်း utility",
+        "optimization.examples_title": "Optimizer ဆုံးဖြတ်ချက် နမူနာများ",
+        "optimization.uncertainty_title": "လက်တွေ့ utility မသေချာမှု",
+        "optimization.sensitivity_title": "Simulator အတွင်း sensitivity အထောက်အထား",
+        "optimization.outcome_sensitivity": "Outcome ပြန်လည် draw sensitivity",
+        "optimization.allocation_sensitivity": (
+            "Probability ပြောင်းလဲ rerouting sensitivity"
+        ),
+        "optimization.sensitivity_caption": (
+            "Seed နှင့် probability ±3-point stress test များသည် ဖန်တီးထားသော "
+            "simulator အတွင်း ခိုင်မာမှုကိုသာ တိုင်းတာပြီး gateway အစစ်အမှန် အထောက်အထား မဟုတ်ပါ။"
+        ),
+        "optimization.objective": (
+            "ရည်မှန်းချက်: {success:g}×အောင်မြင်နိုင်ခြေ − {fee:g}×ကုန်ကျစရိတ် − "
+            "{latency:g}×တုံ့ပြန်ချိန်။ Version: {version}။"
+        ),
+        "optimization.test_period": "စမ်းသပ်ကာလ: {start} မှ {end} အထိ (UTC bucket အပြည့်)။",
+        "optimization.uncertainty_caption": (
+            "95% interval များကို အချိန်စဉ် bucket များအပေါ် paired circular "
+            "moving-block bootstrap ဖြင့်တွက်ထားပြီး ပျောက်နေသော bucket ကို သုညထားသည်။"
+        ),
+        "optimization.no_intervals": "လက်တွေ့နှိုင်းယှဉ်မှုအတွက် uncertainty interval လိုအပ်သည်။",
+        "optimization.policy.uniform_random": "ကျပန်းတူညီ ရွေးချယ်မှု",
+        "optimization.policy.round_robin": "အစဉ်လိုက် လှည့်ပတ်ရွေးချယ်မှု",
+        "optimization.policy.best_static": "အကောင်းဆုံး တစ်သတ်မှတ် gateway",
+        "optimization.policy.greedy_utility": "Greedy utility",
+        "optimization.policy.milp_optimizer": "ကန့်သတ်ချက်ပါ MILP optimizer",
+        "optimization.column.policy": "မူဝါဒ",
+        "optimization.column.sample_size": "နမူနာအရေအတွက်",
+        "optimization.column.success_rate": "အောင်မြင်နှုန်း",
+        "optimization.column.total_fee": "စုစုပေါင်း ကုန်ကျစရိတ်",
+        "optimization.column.average_latency": "ပျမ်းမျှ တုံ့ပြန်ချိန် (ms)",
+        "optimization.column.expected_utility": "မျှော်မှန်း utility",
+        "optimization.column.baseline": "အခြေခံ policy",
+        "optimization.column.estimate": "ခန့်မှန်းတန်ဖိုး",
+        "optimization.column.lower": "အောက်ခြေ 95%",
+        "optimization.column.upper": "အပေါ်ခြေ 95%",
+        "optimization.column.includes_zero": "သုည ပါဝင်မှု",
+        "optimization.column.normal_success": "ပုံမှန်ကာလ အောင်မြင်နှုန်း",
+        "optimization.column.degraded_success": "ချို့ယွင်းကာလ အောင်မြင်နှုန်း",
+        "optimization.column.degraded_transactions": "ချို့ယွင်းကာလ transaction",
+        "optimization.column.feasible_buckets": "ဖြေရှင်းနိုင်သည့် bucket",
+        "optimization.column.infeasible_buckets": "မဖြေရှင်းနိုင်သည့် bucket",
         "admin.title": "စီမံခန့်ခွဲသူ ငွေပေးချေမှု စီမံခန့်ခွဲမှု",
         "admin.fallback_disabled": (
             "Demo fallback data အသုံးပြုနေချိန် database ပြင်ဆင်မှု မရနိုင်ပါ။"

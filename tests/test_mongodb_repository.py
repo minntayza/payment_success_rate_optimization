@@ -16,6 +16,7 @@ from pymongo.errors import (
 )
 
 from payment_dashboard import mongodb
+from payment_dashboard.alerting import difference_of_proportions_interval
 from payment_dashboard.analytics import (
     add_latency_band,
     failure_breakdown,
@@ -108,21 +109,20 @@ def _metadata(
     documents: list[dict[str, object]],
     branch: list[dict[str, Any]],
 ) -> list[dict[str, object]]:
-    selected = list(documents)
-    for stage in branch:
-        if "$match" in stage:
-            selected = [item for item in selected if _matches(item, stage["$match"])]
-        elif "$sort" in stage:
-            fields = list(stage["$sort"])
-            selected.sort(key=lambda item: tuple(item.get(field) for field in fields))
-        elif "$limit" in stage:
-            selected = selected[: stage["$limit"]]
-    if not selected:
+    del branch
+    if not documents:
         return []
     return [
         {
-            "simulation_version": selected[0].get(
-                "simulation_version", mongodb.LEGACY_SIMULATION_VERSION
+            "simulation_versions": sorted(
+                {
+                    str(
+                        item.get(
+                            "simulation_version", mongodb.LEGACY_SIMULATION_VERSION
+                        )
+                    )
+                    for item in documents
+                }
             )
         }
     ]
@@ -206,6 +206,56 @@ def test_repository_uses_injected_collection_name() -> None:
     assert len(isolated.aggregate_calls) == 2
 
 
+def test_routing_contexts_return_full_active_history_in_chronological_order() -> None:
+    documents = [
+        _document(
+            "T-LATE",
+            timestamp=datetime(2025, 1, 2, 12, 0),
+        ),
+        _document(
+            "T-DELETED",
+            timestamp=datetime(2025, 1, 1, 12, 0),
+            is_deleted=True,
+        ),
+        _document(
+            "T-EARLY",
+            timestamp=datetime(2025, 1, 1, 13, 0),
+        ),
+    ]
+
+    class RoutingCollection:
+        def __init__(self) -> None:
+            self.aggregate_calls: list[list[dict[str, object]]] = []
+
+        def aggregate(
+            self,
+            pipeline: list[dict[str, object]],
+        ) -> list[dict[str, object]]:
+            self.aggregate_calls.append(pipeline)
+            selected = [item for item in documents if not item["is_deleted"]]
+            selected.sort(
+                key=lambda item: (
+                    item["transaction_timestamp"],
+                    item["transaction_id"],
+                )
+            )
+            return selected
+
+    collection = RoutingCollection()
+    repository = mongodb.MongoDashboardRepository({"transactions": collection})
+
+    frame = repository.fetch_routing_contexts()
+
+    assert frame["Transaction ID"].tolist() == ["T-EARLY", "T-LATE"]
+    assert collection.aggregate_calls == [
+        [
+            {"$match": {"is_deleted": False}},
+            {"$sort": {"transaction_timestamp": 1, "transaction_id": 1}},
+            {"$project": mongodb.PUBLIC_TRANSACTION_PROJECTION},
+        ]
+    ]
+
+
 def _operators(value: object) -> set[str]:
     if isinstance(value, dict):
         return {
@@ -254,12 +304,20 @@ def _alert_records(
             (item for item in documents if item["bank_gateway"] == gateway),
             key=lambda item: (item["transaction_timestamp"], item["transaction_id"]),
         )
-        baseline = sum(item["transaction_status"] == "Success" for item in rows) / len(
-            rows
+        baseline_rows = rows[:-window_size]
+        recent_rows = rows[-window_size:]
+        sufficient = (
+            len(recent_rows) >= window_size
+            and len(baseline_rows) >= mongodb.ALERT_BASELINE_MIN_SIZE
         )
-        sufficient = len(rows) >= window_size
+        baseline = (
+            sum(item["transaction_status"] == "Success" for item in baseline_rows)
+            / len(baseline_rows)
+            if baseline_rows
+            else float("nan")
+        )
         rolling_rate = (
-            sum(item["transaction_status"] == "Success" for item in rows[-window_size:])
+            sum(item["transaction_status"] == "Success" for item in recent_rows)
             / window_size
             if sufficient
             else float("nan")
@@ -267,14 +325,40 @@ def _alert_records(
         drop = baseline - rolling_rate if sufficient else float("nan")
         if sufficient and rounds_drop:
             drop = round(drop, 12)
+        lower, upper = (
+            difference_of_proportions_interval(
+                sum(item["transaction_status"] == "Success" for item in baseline_rows),
+                len(baseline_rows),
+                sum(item["transaction_status"] == "Success" for item in recent_rows),
+                len(recent_rows),
+            )
+            if sufficient
+            else (float("nan"), float("nan"))
+        )
         records.append(
             {
                 "Bank Gateway": gateway,
                 "baseline_rate": baseline,
                 "rolling_rate": rolling_rate,
+                "baseline_count": len(baseline_rows),
+                "recent_count": len(recent_rows),
+                "baseline_start": baseline_rows[0]["transaction_timestamp"]
+                if baseline_rows
+                else None,
+                "baseline_end": baseline_rows[-1]["transaction_timestamp"]
+                if baseline_rows
+                else None,
+                "recent_start": recent_rows[0]["transaction_timestamp"]
+                if recent_rows
+                else None,
+                "recent_end": recent_rows[-1]["transaction_timestamp"]
+                if recent_rows
+                else None,
                 "drop": drop,
+                "drop_ci_lower": lower,
+                "drop_ci_upper": upper,
                 "has_sufficient_history": sufficient,
-                "is_alert": sufficient and drop >= threshold,
+                "is_alert": sufficient and drop >= threshold and lower > 0,
             }
         )
     return records
@@ -356,7 +440,8 @@ def test_soft_deleted_documents_are_excluded_from_every_result() -> None:
     assert snapshot.metrics["transaction_count"] == 1
     assert snapshot.transactions["Transaction ID"].tolist() == ["TX-ACTIVE"]
     gateway_a = snapshot.alerts.set_index("Bank Gateway").loc["Gateway A"]
-    assert gateway_a["baseline_rate"] == 1.0
+    assert bool(gateway_a["has_sufficient_history"]) is False
+    assert pd.isna(gateway_a["baseline_rate"])
 
 
 def test_alerts_use_full_active_history_and_include_configured_gateways() -> None:
@@ -364,15 +449,15 @@ def test_alerts_use_full_active_history_and_include_configured_gateways() -> Non
     start = datetime(2025, 1, 17)
     documents = [
         _document(f"TX-{number:03d}", timestamp=start + timedelta(minutes=number))
-        for number in range(50)
+        for number in range(200)
     ]
     documents.extend(
         _document(
             f"TX-{number:03d}",
             timestamp=start + timedelta(minutes=number),
-            status="Success" if number < 90 else "Failed",
+            status="Success" if number < 245 else "Failed",
         )
-        for number in range(50, 100)
+        for number in range(200, 250)
     )
     database = Database(documents)
 
@@ -380,7 +465,7 @@ def test_alerts_use_full_active_history_and_include_configured_gateways() -> Non
         DashboardFilters(statuses=("Failed",)), PageRequest(number=1, size=10)
     )
 
-    assert snapshot.total_transactions == 10
+    assert snapshot.total_transactions == 5
     assert snapshot.alerts["Bank Gateway"].tolist() == [
         "Gateway A",
         "Gateway B",
@@ -409,7 +494,8 @@ def test_alert_cutoff_prefers_highest_transaction_ids_when_timestamps_tie() -> N
     )
 
     gateway_a = snapshot.alerts.set_index("Bank Gateway").loc["Gateway A"]
-    assert gateway_a["rolling_rate"] == 0.0
+    assert bool(gateway_a["has_sufficient_history"]) is False
+    assert pd.isna(gateway_a["rolling_rate"])
     alert_pipeline = database["transactions"].aggregate_calls[1][1]["$facet"]["alerts"]
     assert "$documentNumber" not in _operators(alert_pipeline)
     assert alert_pipeline[0]["$group"]["latest_statuses"]["$topN"] == {
@@ -447,8 +533,8 @@ def test_document_number_window_uses_atlas_compatible_single_sort_key() -> None:
     assert all(len(window["sortBy"]) == 1 for window in document_number_windows)
 
 
-def test_metadata_is_deterministic_and_independent_of_display_filters() -> None:
-    """The oldest active source version wins even when that row is filtered out."""
+def test_metadata_rejects_mixed_lineage_independent_of_display_filters() -> None:
+    """A display filter cannot hide incompatible full-history lineage."""
     database = Database(
         [
             _document(
@@ -466,14 +552,30 @@ def test_metadata_is_deterministic_and_independent_of_display_filters() -> None:
         ]
     )
 
-    snapshot = mongodb.MongoDashboardRepository(database).fetch(
-        DashboardFilters(statuses=("Failed",)), PageRequest(number=1, size=10)
+    with pytest.raises(
+        mongodb.DataValidationError, match="exactly one Simulation Version"
+    ):
+        mongodb.MongoDashboardRepository(database).fetch(
+            DashboardFilters(statuses=("Failed",)), PageRequest(number=1, size=10)
+        )
+    metadata = database["transactions"].aggregate_calls[1][1]["$facet"]["metadata"]
+    assert "$group" in metadata[0]
+
+
+def test_repository_rejects_mixed_live_simulation_versions() -> None:
+    database = Database(
+        [
+            _document("TX-1", simulation_version="controlled-v1"),
+            _document("TX-2", simulation_version="controlled-v2"),
+        ]
     )
 
-    assert snapshot.transactions["Transaction ID"].tolist() == ["TX-NEW"]
-    assert snapshot.simulation_version == "legacy-v0"
-    metadata = database["transactions"].aggregate_calls[1][1]["$facet"]["metadata"]
-    assert metadata[0] == {"$sort": {"transaction_timestamp": 1, "transaction_id": 1}}
+    with pytest.raises(
+        mongodb.DataValidationError, match="exactly one Simulation Version"
+    ):
+        mongodb.MongoDashboardRepository(database).fetch(
+            DashboardFilters(), PageRequest(number=1, size=10)
+        )
 
 
 def test_empty_live_result_returns_complete_bounded_snapshot() -> None:

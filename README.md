@@ -11,20 +11,27 @@ fixed-seed simulation. The original outcome is retained separately as
 `Transaction Status`. All gateway and success-rate results are synthetic and
 must not be interpreted as measurements of real banks or payment gateways.
 
-The optimization benchmark adds synthetic gateway fees, latency, eligibility,
-capacity, incidents, and counterfactual outcomes. It targets an approximate
-chronological 60/20/20 split while keeping complete UTC hourly buckets intact,
-and keeps evaluation outcomes hidden until routing decisions are fixed. Data
-with fewer than three distinct hourly buckets is reported as unsuitable instead
-of being split or evaluated. See [the dataset card](docs/data-card.md) for
-provenance and limitations.
+The optimization benchmark adds a separate synthetic timeline plus synthetic
+gateway fees, latency, eligibility, capacity, incidents, and counterfactual
+outcomes. Source timestamps remain unchanged. In stable source-time and
+transaction-ID order, benchmark timestamps begin at `2025-01-01T00:00:00Z` and
+advance by 60 seconds. This gives the short source extract enough complete UTC
+hourly buckets for an approximate chronological 60/20/20 split without dividing
+capacity buckets. Evaluation outcomes remain hidden until routing decisions are
+fixed. Data with fewer than three benchmark-hour buckets is reported as
+unsuitable. See [the dataset card](docs/data-card.md) for provenance and
+limitations.
 
 ## Features
 
 - Capacity- and eligibility-constrained gateway allocation using SciPy MILP
-- Comparisons with four routing baselines on an untouched chronological period
+- Comparisons with four routing baselines on an untouched chronological period,
+  including a greedy policy scored by the same utility as MILP
 - Explicit success, fee, latency, utilization, and expected-utility tradeoffs
 - Deterministic, versioned candidate routes and separately held outcomes
+- Counterfactual draws keyed by transaction and gateway, stable under unrelated
+  row insertion or reordering
+- Preserved source timestamps plus a disclosed synthetic benchmark timeline
 - Reproducible Gateway A-D assignment
 - Strict CSV schema and value validation
 - Overall and gateway-level payment success metrics
@@ -123,6 +130,34 @@ amounts over 1,000 −2 points. Final probabilities are clipped to 55%–99%
 before the fixed-seed draw. These are academic assumptions, not observed
 payment behavior.
 
+### Synthetic routing timeline and capacity
+
+Routing evaluation does not treat the source extract's two clock-hour buckets
+as sufficient longitudinal evidence. It creates a separate `Benchmark
+Timestamp` at 60-second intervals while retaining the original `Timestamp` for
+dashboard history and persisted lineage. Gateway A-D hourly capacities are 25,
+37, 10, and 47 in `routing-benchmark-v4`. Gateway C is deliberately scarce;
+its simulated mobile success uplift rises with transaction amount, so a myopic
+same-objective greedy policy can consume capacity before later transactions with
+greater marginal benefit arrive. The timeline, uplift, and capacities are
+controlled simulation assumptions, not measurements or source-data fields.
+Because benchmark time is assigned by stable row order, adding or removing a
+transaction creates a new benchmark snapshot and run ID.
+
+Gateway state is explicitly normal, degraded, or unavailable. Degraded gateways
+remain routable with reduced capacity and probability plus higher latency;
+unavailable gateways cannot receive assignments. Persisted run contexts contain
+only routing inputs and timestamps, never account identifiers. Probability stress
+evidence reruns greedy and MILP allocation; outcome-seed evidence redraws only the
+hidden synthetic outcomes.
+
+When the operational dashboard is live, optimization contexts are read from the
+full active MongoDB transaction history, independent of display filters and
+pagination. If that full-history query fails, the optimization panel is marked
+unavailable; it does not silently substitute local demo data. In demo mode both
+monitoring and optimization use the same validated local/demo frame. Gateway
+alternatives and outcomes remain synthetic in both modes.
+
 ## Run the tests
 
 ```bash
@@ -206,6 +241,21 @@ without exposing the key.
 
 Display filters do not change alert calculations. Alerts always use the
 full active transaction history.
+
+Optimization likewise ignores display filters. It uses the same underlying
+source as monitoring and evaluates a fixed chronological benchmark snapshot.
+Realized-utility intervals use a paired circular moving-block bootstrap over
+contiguous test buckets; policies missing a bucket are aligned to zero assigned
+utility for that bucket instead of being omitted from uncertainty reporting.
+The report also shows outcome-seed and ±3-percentage-point probability stress
+results. These measure robustness inside the hand-authored simulator and do not
+create empirical evidence about real gateways.
+
+Administration uses one shared demo credential, not individual user identities;
+audit events identify the configured shared subject. Login throttling is stored
+in MongoDB so a fresh browser cannot bypass the cooldown. Dataset imports
+preserve soft deletions, leave absent records unchanged, and audit inserted or
+updated rows.
 
 ## Metric definitions
 

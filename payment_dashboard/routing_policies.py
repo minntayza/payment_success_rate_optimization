@@ -37,7 +37,7 @@ def _allocate(
         ordered_ids = bucket_candidates.sort_values(["timestamp", "transaction_id"])[
             "transaction_id"
         ].drop_duplicates()
-        failed_id: str | None = None
+        unassigned_ids: list[str] = []
         for position, transaction_id in enumerate(ordered_ids):
             options = bucket_candidates.loc[
                 bucket_candidates["transaction_id"].eq(transaction_id)
@@ -52,22 +52,14 @@ def _allocate(
                     remaining[gateway_id] -= 1
                     break
             if selected is None:
-                failed_id = str(transaction_id)
-                break
+                unassigned_ids.append(str(transaction_id))
+                continue
             bucket_decisions.append(selected)
-        if failed_id is not None:
-            bucket_results.append(
-                BucketAllocationResult(
-                    pd.Timestamp(str(time_bucket)),
-                    bucket_candidates.iloc[0:0].copy(),
-                    len(ordered_ids),
-                    tuple(ordered_ids.astype(str)),
-                    False,
-                    f"No feasible route for {failed_id}",
-                )
-            )
-            continue
-        bucket_frame = pd.DataFrame(bucket_decisions).reset_index(drop=True)
+        bucket_frame = (
+            pd.DataFrame(bucket_decisions).reset_index(drop=True)
+            if bucket_decisions
+            else bucket_candidates.iloc[0:0].copy()
+        )
         usage = bucket_frame.groupby("gateway_id").size()
         capacities = bucket_candidates.groupby("gateway_id")["capacity"].first()
         binding = tuple(
@@ -80,14 +72,18 @@ def _allocate(
                 pd.Timestamp(str(time_bucket)),
                 bucket_frame,
                 len(ordered_ids),
-                (),
-                True,
-                None,
+                tuple(unassigned_ids),
+                not unassigned_ids,
+                (
+                    None
+                    if not unassigned_ids
+                    else f"No feasible route for {len(unassigned_ids)} transaction(s)"
+                ),
                 binding,
             )
         )
     feasible_frames = [
-        result.decisions for result in bucket_results if result.is_feasible
+        result.decisions for result in bucket_results if not result.decisions.empty
     ]
     frame = (
         pd.concat(feasible_frames, ignore_index=True)
@@ -144,11 +140,16 @@ def route_best_static(candidates: pd.DataFrame, gateway_id: str) -> AllocationRe
     )
 
 
-def route_greedy_success(candidates: pd.DataFrame) -> AllocationResult:
+def route_greedy_utility(
+    candidates: pd.DataFrame,
+    weights: ObjectiveWeights,
+) -> AllocationResult:
     return _allocate(
         candidates,
-        "greedy_success",
-        lambda frame, _: frame.sort_values(
-            ["expected_success_probability", "gateway_id"], ascending=[False, True]
+        "greedy_utility",
+        lambda frame, _: (
+            frame.assign(_utility=_utility(frame, weights))
+            .sort_values(["_utility", "gateway_id"], ascending=[False, True])
+            .drop(columns="_utility")
         ),
     )

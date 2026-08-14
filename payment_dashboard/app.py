@@ -195,6 +195,10 @@ def _load_data(language: Language = DEFAULT_LANGUAGE) -> DatabaseResult:
             st.info(translate("errors.prepare_data_guidance", language))
             st.stop()
 
+    if os.getenv("PAYMENT_DEMO_MODE") == "1":
+        return DatabaseResult(
+            fallback(), "fallback", "database.fallback_not_configured"
+        )
     return load_dashboard_transactions(fallback)
 
 
@@ -211,10 +215,30 @@ def _load_demo_frame(language: Language = DEFAULT_LANGUAGE) -> pd.DataFrame:
         st.stop()
 
 
+def _load_optimization_contexts(
+    snapshot: DashboardSnapshot,
+    language: Language = DEFAULT_LANGUAGE,
+) -> tuple[pd.DataFrame, str]:
+    """Load routing contexts from the same backend as the dashboard snapshot."""
+    if snapshot.source is DataSource.LIVE:
+        resources = _mongo_resources(_mongo_configuration_fingerprint())
+        if resources is None:
+            raise RuntimeError("Live snapshot has no configured MongoDB resources")
+        frame = MongoDashboardRepository(resources.database).fetch_routing_contexts()
+        return frame, "full active MongoDB transaction history"
+    return _load_demo_frame(language), "validated local/demo transaction history"
+
+
 @st.cache_resource(show_spinner=False)
-def _build_optimization_report(frame: pd.DataFrame) -> OptimizationReport:
-    """Build the deterministic synthetic benchmark independently of live reads."""
-    return PandasRoutingRepository().build_report(frame)
+def _build_optimization_report(
+    frame: pd.DataFrame,
+    source_label: str,
+) -> OptimizationReport:
+    """Build a deterministic synthetic benchmark from disclosed source contexts."""
+    return PandasRoutingRepository().build_report(
+        frame,
+        source_label=source_label,
+    )
 
 
 @st.cache_resource(show_spinner=False)
@@ -570,13 +594,27 @@ def render_app() -> None:
     )
     _render_source_status(snapshot, language)
 
-    optimization_frame = _load_demo_frame(language)
     try:
-        optimization_report = _build_optimization_report(optimization_frame)
+        optimization_frame, optimization_source = _load_optimization_contexts(
+            snapshot,
+            language,
+        )
+        optimization_report = _build_optimization_report(
+            optimization_frame,
+            optimization_source,
+        )
     except ValueError as exc:
         st.warning(f"Synthetic routing benchmark unavailable: {exc}")
+    except Exception as exc:
+        diagnostic = classify_mongodb_error(exc)
+        if diagnostic == "unexpected":
+            raise
+        st.warning(
+            "Synthetic routing benchmark unavailable because the full active "
+            f"MongoDB history could not be read ({diagnostic})."
+        )
     else:
-        render_optimization_report(optimization_report)
+        render_optimization_report(optimization_report, language)
 
     render_story_hero(snapshot, snapshot.source.value, language)
     render_kpis(snapshot, language)

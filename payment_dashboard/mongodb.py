@@ -19,6 +19,7 @@ from pymongo.errors import (
     ServerSelectionTimeoutError,
 )
 
+from payment_dashboard.alerting import difference_of_proportions_interval
 from payment_dashboard.analytics import add_latency_band
 from payment_dashboard.config import (
     ALERT_BASELINE_MIN_SIZE,
@@ -30,7 +31,7 @@ from payment_dashboard.config import (
     SUCCESS_STATUS,
 )
 from payment_dashboard.dashboard_repository import DashboardFilters, PageRequest
-from payment_dashboard.data_loader import validate_transactions
+from payment_dashboard.data_loader import DataValidationError, validate_transactions
 from payment_dashboard.models import DashboardSnapshot, DataSource
 
 LOGGER = logging.getLogger(__name__)
@@ -207,6 +208,27 @@ class MongoDashboardRepository:
             simulation_version=_metadata_version(result.get("metadata", [])),
             diagnostic=None,
         )
+
+    def fetch_routing_contexts(self) -> pd.DataFrame:
+        """Return every active transaction for same-source routing evaluation."""
+        collection = self.database[self.collection_name]
+        documents = list(
+            collection.aggregate(
+                [
+                    {"$match": {"is_deleted": False}},
+                    {
+                        "$sort": {
+                            "transaction_timestamp": 1,
+                            "transaction_id": 1,
+                        }
+                    },
+                    {"$project": PUBLIC_TRANSACTION_PROJECTION},
+                ]
+            )
+        )
+        if not documents:
+            return _transactions_frame([]).drop(columns="Latency Band")
+        return documents_to_frame(documents)
 
 
 def _aggregate_one(
@@ -481,6 +503,7 @@ def _alerts_pipeline() -> list[dict[str, object]]:
                 "success_count": {
                     "$sum": {"$cond": [_status_is(SUCCESS_STATUS), 1, 0]}
                 },
+                "baseline_start": {"$min": "$transaction_timestamp"},
                 "latest_statuses": {
                     "$topN": {
                         "sortBy": {
@@ -489,6 +512,16 @@ def _alerts_pipeline() -> list[dict[str, object]]:
                         },
                         "output": "$transaction_status",
                         "n": ALERT_WINDOW_SIZE,
+                    }
+                },
+                "latest_timestamps": {
+                    "$topN": {
+                        "sortBy": {
+                            "transaction_timestamp": -1,
+                            "transaction_id": -1,
+                        },
+                        "output": "$transaction_timestamp",
+                        "n": ALERT_WINDOW_SIZE + 1,
                     }
                 },
             }
@@ -505,6 +538,13 @@ def _alerts_pipeline() -> list[dict[str, object]]:
                         }
                     }
                 },
+                "baseline_end": {
+                    "$arrayElemAt": ["$latest_timestamps", ALERT_WINDOW_SIZE]
+                },
+                "recent_start": {
+                    "$arrayElemAt": ["$latest_timestamps", ALERT_WINDOW_SIZE - 1]
+                },
+                "recent_end": {"$arrayElemAt": ["$latest_timestamps", 0]},
             }
         },
         {
@@ -579,6 +619,10 @@ def _alerts_pipeline() -> list[dict[str, object]]:
                 "baseline_rate": 1,
                 "baseline_count": 1,
                 "recent_count": "$rolling_count",
+                "baseline_start": 1,
+                "baseline_end": 1,
+                "recent_start": 1,
+                "recent_end": 1,
                 "rolling_rate": 1,
                 "drop": 1,
                 "has_sufficient_history": 1,
@@ -596,14 +640,20 @@ def _alerts_pipeline() -> list[dict[str, object]]:
 
 def _metadata_pipeline() -> list[dict[str, object]]:
     return [
-        {"$sort": {"transaction_timestamp": 1, "transaction_id": 1}},
-        {"$limit": 1},
+        {
+            "$group": {
+                "_id": None,
+                "simulation_versions": {
+                    "$addToSet": {
+                        "$ifNull": ["$simulation_version", LEGACY_SIMULATION_VERSION]
+                    }
+                },
+            }
+        },
         {
             "$project": {
                 "_id": 0,
-                "simulation_version": {
-                    "$ifNull": ["$simulation_version", LEGACY_SIMULATION_VERSION]
-                },
+                "simulation_versions": 1,
             }
         },
     ]
@@ -641,12 +691,46 @@ def _alerts_frame(records: object) -> pd.DataFrame:
         "rolling_rate",
         "baseline_count",
         "recent_count",
+        "baseline_start",
+        "baseline_end",
+        "recent_start",
+        "recent_end",
         "drop",
+        "drop_ci_lower",
+        "drop_ci_upper",
         "has_sufficient_history",
         "is_alert",
     ]
     frame = _records_frame(records, columns)
     frame = frame.set_index("Bank Gateway").reindex(GATEWAYS).reset_index()
+    for column in ("baseline_start", "baseline_end", "recent_start", "recent_end"):
+        frame[column] = pd.to_datetime(frame[column], utc=True)
+    sufficient = frame["has_sufficient_history"].astype("boolean").fillna(False)
+    intervals = frame.apply(
+        lambda row: (
+            difference_of_proportions_interval(
+                round(float(row["baseline_rate"]) * int(row["baseline_count"])),
+                int(row["baseline_count"]),
+                round(float(row["rolling_rate"]) * int(row["recent_count"])),
+                int(row["recent_count"]),
+            )
+            if bool(row.get("has_sufficient_history", False))
+            and pd.notna(row.get("baseline_rate"))
+            and pd.notna(row.get("rolling_rate"))
+            and pd.notna(row.get("baseline_count"))
+            and pd.notna(row.get("recent_count"))
+            else (float("nan"), float("nan"))
+        ),
+        axis=1,
+    )
+    frame["drop_ci_lower"] = intervals.map(lambda value: value[0])
+    frame["drop_ci_upper"] = intervals.map(lambda value: value[1])
+    frame["is_alert"] = (
+        sufficient.astype(bool)
+        & frame["drop"].ge(ALERT_THRESHOLD)
+        & frame["drop_ci_lower"].gt(0)
+    )
+    frame["has_sufficient_history"] = sufficient.astype(bool)
     for column in ("has_sufficient_history", "is_alert"):
         frame[column] = frame[column].astype("boolean").fillna(False).astype(bool)
     return frame
@@ -685,6 +769,14 @@ def _total_count(records: object) -> int:
 
 def _metadata_version(records: object) -> str:
     if isinstance(records, list) and records and isinstance(records[0], dict):
+        versions = records[0].get("simulation_versions")
+        if isinstance(versions, list):
+            unique = {str(value).strip() for value in versions if str(value).strip()}
+            if len(unique) != 1:
+                raise DataValidationError(
+                    "Live data must contain exactly one Simulation Version"
+                )
+            return next(iter(unique))
         value = records[0].get("simulation_version")
         if value is not None:
             return str(value)

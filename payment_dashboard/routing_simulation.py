@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 import pandas as pd
 
 from payment_dashboard.routing_config import (
+    BENCHMARK_TIMELINE_FREQUENCY,
+    BENCHMARK_TIMELINE_START,
+    BENCHMARK_TIMESTAMP_COLUMN,
     GATEWAY_PROFILES,
     ROUTING_SIMULATION_VERSION,
     gateway_state,
@@ -13,18 +18,36 @@ from payment_dashboard.routing_config import (
 from payment_dashboard.routing_models import RoutingBenchmark
 
 
-def generate_routing_benchmark(
-    contexts: pd.DataFrame, seed: int = 42
-) -> RoutingBenchmark:
+def _stable_uniform(seed: int, transaction_id: str, gateway_id: str) -> float:
+    key = f"{ROUTING_SIMULATION_VERSION}\x1f{seed}\x1f{transaction_id}\x1f{gateway_id}"
+    digest = hashlib.sha256(key.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64
+
+
+def add_benchmark_timestamps(contexts: pd.DataFrame) -> pd.DataFrame:
+    """Add a deterministic synthetic timeline without replacing source time."""
     ordered = contexts.sort_values(
         ["Timestamp", "Transaction ID"], kind="stable"
     ).copy()
     ordered["Timestamp"] = pd.to_datetime(ordered["Timestamp"], utc=True)
+    ordered[BENCHMARK_TIMESTAMP_COLUMN] = pd.date_range(
+        start=BENCHMARK_TIMELINE_START,
+        periods=len(ordered),
+        freq=BENCHMARK_TIMELINE_FREQUENCY,
+    )
+    return ordered
+
+
+def generate_routing_benchmark(
+    contexts: pd.DataFrame, seed: int = 42
+) -> RoutingBenchmark:
+    ordered = add_benchmark_timestamps(contexts)
     rows: list[dict[str, object]] = []
     for _, transaction in ordered.iterrows():
         amount = float(transaction["Transaction Amount"])
-        hour = transaction["Timestamp"].hour
-        time_bucket = transaction["Timestamp"].floor("h")
+        benchmark_timestamp = transaction[BENCHMARK_TIMESTAMP_COLUMN]
+        hour = benchmark_timestamp.hour
+        time_bucket = benchmark_timestamp.floor("h")
         for profile in GATEWAY_PROFILES:
             state = gateway_state(time_bucket, profile.gateway_id)
             adjustment = 0.0
@@ -34,7 +57,8 @@ def generate_routing_benchmark(
                 profile.gateway_id == "Gateway C"
                 and transaction["Device Used"] == "Mobile"
             ):
-                adjustment += 0.10
+                eligible_amount = min(amount, 2_500.0)
+                adjustment += 0.35 * eligible_amount / 2_500.0
             if (
                 profile.gateway_id == "Gateway D"
                 and transaction["Transaction Type"] == "Transfer"
@@ -56,7 +80,8 @@ def generate_routing_benchmark(
             rows.append(
                 {
                     "transaction_id": str(transaction["Transaction ID"]),
-                    "timestamp": transaction["Timestamp"],
+                    "timestamp": benchmark_timestamp,
+                    "source_timestamp": transaction["Timestamp"],
                     "time_bucket": time_bucket,
                     "gateway_id": profile.gateway_id,
                     "eligible": eligible,
@@ -65,16 +90,25 @@ def generate_routing_benchmark(
                     "expected_success_probability": probability,
                     "expected_fee": fee,
                     "expected_latency_ms": latency,
-                    "is_degraded": not state.available,
+                    "operational_state": state.operational_state,
+                    "is_degraded": state.operational_state == "degraded",
                     "state_version": state.state_version,
                     "simulation_version": ROUTING_SIMULATION_VERSION,
                 }
             )
     candidates = pd.DataFrame.from_records(rows)
-    rng = np.random.default_rng(seed)
     outcomes = candidates[["transaction_id", "gateway_id"]].copy()
     outcomes["realized_success"] = (
-        rng.random(len(candidates))
+        np.fromiter(
+            (
+                _stable_uniform(seed, str(row.transaction_id), str(row.gateway_id))
+                for row in candidates[["transaction_id", "gateway_id"]].itertuples(
+                    index=False
+                )
+            ),
+            dtype=float,
+            count=len(candidates),
+        )
         < candidates["expected_success_probability"].to_numpy()
     )
     return RoutingBenchmark(ordered, candidates, outcomes, ROUTING_SIMULATION_VERSION)

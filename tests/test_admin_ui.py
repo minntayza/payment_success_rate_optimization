@@ -76,6 +76,51 @@ render_admin_panel(
     assert app.text_input(key="add_id")
 
 
+@pytest.mark.integration
+def test_authenticated_live_admin_uses_unique_edit_widget_keys() -> None:
+    password_hash = "configured-hash"
+    app = AppTest.from_string(
+        f'''
+from datetime import datetime
+
+import pandas as pd
+import streamlit as st
+from payment_dashboard.models import DataSource
+from payment_dashboard.ui.admin import AUTH_STATE_KEY, render_admin_panel
+
+st.session_state[AUTH_STATE_KEY] = {{
+    "authenticated": True,
+    "fingerprint": "{hash_fingerprint(password_hash)}",
+    "subject": "demo-admin",
+    "role": "administrator",
+    "authenticated_at": "{datetime.now(UTC).isoformat()}",
+    "expires_at": "{(datetime.now(UTC) + timedelta(minutes=30)).isoformat()}",
+}}
+frame = pd.DataFrame([{{
+    "Transaction ID": "TX1",
+    "Sender Account ID": "S1",
+    "Receiver Account ID": "R1",
+    "Transaction Amount": 100.0,
+    "Transaction Type": "Transfer",
+    "Timestamp": datetime(2025, 1, 17, 10, 3),
+    "Transaction Status": "Success",
+    "Fraud Flag": False,
+    "Geolocation (Latitude/Longitude)": "A",
+    "Device Used": "Mobile",
+    "Network Slice ID": "Slice1",
+    "Latency (ms)": 4.0,
+    "Slice Bandwidth (Mbps)": 100.0,
+    "Bank Gateway": "Gateway A",
+}}])
+render_admin_panel(object(), DataSource.LIVE, frame, "en", "{password_hash}")
+'''
+    ).run(timeout=10)
+
+    assert not app.exception
+    assert app.selectbox(key="edit_transaction_selector").value == "TX1"
+    assert app.text_input(key="edit_id").value == "TX1"
+
+
 def test_row_values_remove_pin_and_preserve_boolean(sample_transactions) -> None:
     frame = sample_transactions.iloc[:1].assign(**{"Bank Gateway": "Gateway A"})
     values = admin._row_values(frame.iloc[0])
@@ -99,9 +144,16 @@ def test_authentication_requires_matching_hash_fingerprint(monkeypatch) -> None:
     assert admin.AUTH_STATE_KEY not in admin.st.session_state
 
 
-def test_failed_admin_logins_trigger_bounded_cooldown(monkeypatch) -> None:
-    monkeypatch.setattr(admin.st, "session_state", {})
-    for _ in range(admin.MAX_LOGIN_ATTEMPTS):
-        admin._record_failed_login()
-    assert admin._login_allowed() is False
-    assert admin.LOGIN_FAILURES_KEY in admin.st.session_state
+def test_failed_admin_login_uses_server_backed_throttle(monkeypatch) -> None:
+    record = MagicMock()
+    allowed = MagicMock(return_value=False)
+    monkeypatch.setattr(admin, "record_failed_login", record)
+    monkeypatch.setattr(admin, "login_allowed", allowed)
+    database = object()
+
+    admin._record_failed_login(database, "encoded-hash")
+
+    fingerprint = hash_fingerprint("encoded-hash")
+    record.assert_called_once_with(database, fingerprint)
+    assert admin._login_allowed(database, "encoded-hash") is False
+    allowed.assert_called_once_with(database, fingerprint)

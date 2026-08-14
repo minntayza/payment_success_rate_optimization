@@ -83,6 +83,24 @@ def test_prepared_validation_requires_simulation_metadata(sample_transactions):
         data_loader.validate_prepared_transactions(prepared)
 
 
+def test_prepared_validation_rejects_mixed_simulation_versions(
+    sample_transactions,
+) -> None:
+    prepared = (
+        sample_transactions.iloc[:2]
+        .drop(columns=["PIN Code"])
+        .assign(
+            **{
+                "Bank Gateway": ["Gateway A", "Gateway B"],
+                "Simulation Version": ["controlled-v1", "controlled-v2"],
+            }
+        )
+    )
+
+    with pytest.raises(DataValidationError, match="exactly one Simulation Version"):
+        data_loader.validate_prepared_transactions(prepared)
+
+
 def test_prepared_loader_does_not_invent_legacy_simulation_version(
     sample_transactions, tmp_path
 ) -> None:

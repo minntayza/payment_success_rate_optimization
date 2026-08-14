@@ -49,9 +49,13 @@ Open **Settings → Secrets** and add:
 MONGODB_URI = "mongodb+srv://app-user:password@cluster.example.mongodb.net/"
 MONGODB_DATABASE = "payment_success_demo"
 ADMIN_PASSWORD_HASH = "pbkdf2_sha256$600000$..."
+ADMIN_SUBJECT = "shared-demo-admin"
 ```
 
-Keep existing AI settings separately. Reboot the app after saving.
+Keep existing AI settings separately. `ADMIN_PASSWORD_HASH` is one shared demo
+credential, not an individual user account; `ADMIN_SUBJECT` is its shared audit
+label. Failed-login counts and cooldown are stored in MongoDB, so a new browser
+does not reset them. Reboot the app after saving.
 
 ## 5. Verify behavior
 
@@ -60,6 +64,11 @@ Keep existing AI settings separately. Reboot the app after saving.
 3. Sign in, create a clearly marked simulated record, edit it, and soft-delete it.
 4. Confirm the record disappears from analytics without being physically deleted.
 5. Confirm `transaction_audit_log` contains INSERT, UPDATE, and SOFT_DELETE events
+   attributed to the configured shared subject.
+
+Dataset re-import preserves soft deletions, updates active matching records,
+inserts new records, leaves absent records unchanged, and writes
+`IMPORT_INSERT`/`IMPORT_UPDATE` audit events as `dataset-importer`.
    and does not contain `pin_code` in its snapshots.
 
 When Atlas is unavailable, the dashboard uses read-only demo fallback data. Rotate
