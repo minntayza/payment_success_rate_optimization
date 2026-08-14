@@ -275,6 +275,64 @@ def render_kpis(
             st.metric(str(label), str(value))
 
 
+def render_overview_kpis(
+    state: DashboardState | DashboardSnapshot,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
+    """Render the four primary Overview KPI cards."""
+    metrics = _dashboard_metrics(state)
+    active_alerts = int(state.alerts["is_alert"].sum())
+
+    kpis = (
+        (
+            "overview_kpi_success",
+            "✓",
+            translate("kpi.success_rate", language),
+            f"{metrics['success_rate']:.1%}",
+        ),
+        (
+            "overview_kpi_transactions",
+            "⇄",
+            translate("kpi.transactions", language),
+            f"{metrics['transaction_count']:,}",
+        ),
+        (
+            "overview_kpi_latency",
+            "◷",
+            translate("kpi.average_latency", language),
+            f"{metrics['average_latency_ms']:.1f} ms",
+        ),
+        (
+            "overview_kpi_alerts",
+            "⚑",
+            translate("kpi.active_alerts", language),
+            active_alerts,
+        ),
+    )
+    for column, (key, icon, label, value) in zip(st.columns(4), kpis, strict=True):
+        with column.container(key=key):
+            st.markdown(
+                f'<span class="kpi-icon" aria-hidden="true">{icon}</span>',
+                unsafe_allow_html=True,
+            )
+            st.metric(str(label), str(value))
+
+
+def render_gateway_health_summary(
+    alerts: pd.DataFrame,
+    language: Language = DEFAULT_LANGUAGE,
+) -> None:
+    """Render compact gateway alert status for the narrow Overview column."""
+    st.subheader(translate("health.title", language))
+    active = alerts.loc[alerts["is_alert"]]
+    if active.empty:
+        st.success(translate("health.no_alert", language))
+        return
+
+    names = ", ".join(active["Bank Gateway"].astype(str))
+    st.error(translate("health.action_required", language, names=names))
+
+
 def render_gateway_health(
     alerts: pd.DataFrame,
     language: Language = DEFAULT_LANGUAGE,

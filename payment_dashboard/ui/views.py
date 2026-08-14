@@ -12,9 +12,10 @@ from payment_dashboard.ui.sections import (
     render_empty_state,
     render_failure_analysis,
     render_gateway_health,
+    render_gateway_health_summary,
     render_gateway_performance,
     render_interpretation_guide,
-    render_kpis,
+    render_overview_kpis,
     render_recent_transactions,
     render_success_trend,
 )
@@ -31,12 +32,12 @@ def render_overview(snapshot: DashboardSnapshot, language: Language) -> None:
         render_empty_state(language)
         return
 
-    render_kpis(snapshot, language)
+    render_overview_kpis(snapshot, language)
     trend, health = st.columns((1.7, 1.0))
     with trend:
         render_success_trend(snapshot, language)
     with health:
-        render_gateway_health(snapshot.alerts, language)
+        render_gateway_health_summary(snapshot.alerts, language)
     render_recent_transactions(snapshot.transactions, language, limit=8)
 
 
