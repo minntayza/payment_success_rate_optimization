@@ -637,51 +637,144 @@ def test_routing_lineage_error_is_visible_as_error(
     ]
 
 
-@pytest.mark.integration
-def test_pagination_widget_does_not_override_session_state(
+@pytest.mark.parametrize(
+    ("view", "filters_visible"),
+    (
+        (DashboardView.OVERVIEW, True),
+        (DashboardView.GATEWAYS, True),
+        (DashboardView.ROUTING, False),
+        (DashboardView.TRANSACTIONS, True),
+        (DashboardView.ADMIN, False),
+    ),
+)
+def test_filter_bar_visibility_is_scoped_to_active_view(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
+    view: DashboardView,
+    filters_visible: bool,
 ) -> None:
-    """Pagination state must not compete with an explicit widget default."""
-    number_inputs: list[dict[str, object]] = []
+    """Catch filters appearing outside operational data views or disappearing."""
     _patch_render_app_shell(monkeypatch, dashboard_state)
     monkeypatch.setattr(
         app_module,
         "render_top_navigation",
-        lambda language: DashboardView.TRANSACTIONS,
+        lambda language: view,
     )
-    monkeypatch.setattr(
-        app_module.st,
-        "number_input",
-        lambda *_, **kwargs: number_inputs.append(kwargs) or 1,
-    )
+    filter_bar = Mock(return_value=DashboardFilters())
+    monkeypatch.setattr(app_module, "render_filter_bar", filter_bar)
 
     app_module.render_app()
 
-    assert len(number_inputs) == 1
-    assert number_inputs[0]["key"] == "transaction_page"
-    assert "value" not in number_inputs[0]
+    if filters_visible:
+        filter_bar.assert_called_once_with(
+            "my",
+            app_module._reset_transaction_page,
+            app_module._reset_repository_filters,
+        )
+    else:
+        filter_bar.assert_not_called()
 
 
-@pytest.mark.integration
-def test_overview_renders_only_overview_view(
+@pytest.mark.parametrize(
+    ("view", "expected_renderer"),
+    (
+        (DashboardView.OVERVIEW, "render_overview"),
+        (DashboardView.GATEWAYS, "render_gateways"),
+        (DashboardView.ROUTING, "render_routing_lab"),
+        (DashboardView.TRANSACTIONS, "render_transactions"),
+        (DashboardView.ADMIN, "render_admin_panel"),
+    ),
+)
+def test_active_view_renders_exactly_one_workflow(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
+    view: DashboardView,
+    expected_renderer: str,
 ) -> None:
     _, rerun, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
-    overview = Mock()
-    blocked = Mock(side_effect=AssertionError("inactive view rendered"))
-    monkeypatch.setattr(app_module, "render_overview", overview)
-    monkeypatch.setattr(app_module, "render_gateways", blocked)
-    monkeypatch.setattr(app_module, "render_routing_lab", blocked)
-    monkeypatch.setattr(app_module, "render_transactions", blocked)
-    monkeypatch.setattr(app_module, "render_admin_panel", blocked)
+    monkeypatch.setattr(app_module, "render_top_navigation", lambda language: view)
+    calls: list[str] = []
+    renderers = {
+        name: Mock(
+            side_effect=lambda *_args, _name=name, **_kwargs: calls.append(_name)
+        )
+        for name in (
+            "render_overview",
+            "render_gateways",
+            "render_routing_lab",
+            "render_transactions",
+            "render_admin_panel",
+        )
+    }
+    for name, renderer in renderers.items():
+        monkeypatch.setattr(app_module, name, renderer)
 
     app_module.render_app()
 
-    overview.assert_called_once_with(snapshot, "my")
-    blocked.assert_not_called()
+    assert calls == [expected_renderer]
+    for name, renderer in renderers.items():
+        if name == expected_renderer:
+            renderer.assert_called_once()
+        else:
+            renderer.assert_not_called()
     rerun.assert_not_called()
+
+    if view in {
+        DashboardView.OVERVIEW,
+        DashboardView.GATEWAYS,
+        DashboardView.TRANSACTIONS,
+    }:
+        renderers[expected_renderer].assert_called_once_with(snapshot, "my")
+    elif view is DashboardView.ROUTING:
+        renderers[expected_renderer].assert_called_once_with(None, "my")
+    else:
+        renderers[expected_renderer].assert_called_once_with(
+            None,
+            snapshot.source,
+            snapshot.transactions,
+            "my",
+            os.getenv("ADMIN_PASSWORD_HASH"),
+        )
+
+
+@pytest.mark.parametrize("view", tuple(DashboardView))
+def test_pagination_is_visible_only_in_transactions(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+    view: DashboardView,
+) -> None:
+    """Catch pagination controls leaking into another workflow or disappearing."""
+    _patch_render_app_shell(monkeypatch, dashboard_state)
+    monkeypatch.setattr(app_module, "render_top_navigation", lambda language: view)
+    page_input = Mock(return_value=1)
+    previous = Mock()
+    next_page = Mock()
+    columns = Mock(return_value=(previous, next_page))
+    summary = Mock()
+    monkeypatch.setattr(app_module.st, "number_input", page_input)
+    monkeypatch.setattr(app_module.st, "columns", columns)
+    monkeypatch.setattr(app_module.st, "caption", summary)
+
+    app_module.render_app()
+
+    if view is DashboardView.TRANSACTIONS:
+        page_input.assert_called_once()
+        assert page_input.call_args.kwargs == {
+            "min_value": 1,
+            "step": 1,
+            "key": "transaction_page",
+            "disabled": True,
+        }
+        columns.assert_called_once_with(2)
+        previous.button.assert_called_once()
+        next_page.button.assert_called_once()
+        summary.assert_called_once()
+    else:
+        page_input.assert_not_called()
+        columns.assert_not_called()
+        previous.button.assert_not_called()
+        next_page.button.assert_not_called()
+        summary.assert_not_called()
 
 
 @pytest.mark.integration
