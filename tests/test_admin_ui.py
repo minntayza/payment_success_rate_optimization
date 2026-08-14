@@ -1,15 +1,62 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
 import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
+import payment_dashboard.app as app_module
 from payment_dashboard.admin_auth import hash_fingerprint
-from payment_dashboard.models import DataSource
+from payment_dashboard.models import DashboardSnapshot, DataSource
 from payment_dashboard.ui import admin
+from payment_dashboard.ui.shell import DashboardView
+
+
+def test_admin_view_does_not_render_analytical_sections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catch Admin leaking any analytical dashboard composition."""
+    monkeypatch.delenv("ADMIN_PASSWORD_HASH", raising=False)
+    snapshot = MagicMock(spec=DashboardSnapshot)
+    snapshot.source = DataSource.DEMO
+    snapshot.transactions = pd.DataFrame()
+    snapshot.total_transactions = 0
+    monkeypatch.setattr(app_module.st, "session_state", {})
+    monkeypatch.setattr(app_module.st, "set_page_config", lambda **_: None)
+    monkeypatch.setattr(app_module.st, "container", lambda *_, **__: nullcontext())
+    monkeypatch.setattr(app_module, "_apply_streamlit_secrets", lambda: None)
+    monkeypatch.setattr(app_module, "apply_page_style", lambda: None)
+    monkeypatch.setattr(app_module, "_render_language_toggle", lambda: "en")
+    monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda language: DashboardView.ADMIN,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "_load_valid_snapshot",
+        lambda *_: (snapshot, 1, 1),
+    )
+    monkeypatch.setattr(app_module, "_render_source_status", lambda *_: None)
+    overview = Mock()
+    monkeypatch.setattr(app_module, "render_overview", overview, raising=False)
+    render_admin = Mock(return_value=False)
+    monkeypatch.setattr(app_module, "render_admin_panel", render_admin)
+
+    app_module.render_app()
+
+    overview.assert_not_called()
+    render_admin.assert_called_once_with(
+        None,
+        snapshot.source,
+        snapshot.transactions,
+        "en",
+        None,
+    )
 
 
 def test_fallback_mode_disables_transaction_editing(monkeypatch) -> None:

@@ -7,7 +7,7 @@ from contextlib import nullcontext
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
 import pandas as pd
 import pytest
@@ -41,6 +41,7 @@ from payment_dashboard.ui.sections import (
     render_recent_transactions,
     render_story_hero,
 )
+from payment_dashboard.ui.shell import DashboardView
 
 
 def dashboard_fixture(sample_transactions: pd.DataFrame) -> pd.DataFrame:
@@ -203,6 +204,9 @@ def test_transaction_page_changes_without_full_collection_load(
     app = AppTest.from_file("streamlit_app.py").run(timeout=10)
 
     assert not app.exception
+    app.radio(key="dashboard_view").set_value(DashboardView.TRANSACTIONS).run(
+        timeout=10
+    )
     assert app.number_input(key="transaction_page").value == 1
     first_page = app.dataframe[-1].value
 
@@ -521,25 +525,116 @@ def _patch_render_app_shell(
         "_render_repository_filters",
         lambda *_args, **_kwargs: DashboardFilters(),
     )
+    monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda *_args, **_kwargs: DashboardView.OVERVIEW,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "render_filter_bar",
+        lambda *_args, **_kwargs: DashboardFilters(),
+        raising=False,
+    )
+    for renderer in (
+        "render_overview",
+        "render_gateways",
+        "render_routing_lab",
+        "render_transactions",
+    ):
+        monkeypatch.setattr(app_module, renderer, lambda *_, **__: None, raising=False)
     monkeypatch.setattr(app_module, "_render_source_status", lambda *_args: None)
     monkeypatch.setattr(app_module, "_render_source_badge", lambda *_args: None)
     monkeypatch.setattr(app_module, "_mongo_resources", lambda *_args: None)
+    monkeypatch.setattr(
+        app_module,
+        "_load_optimization_contexts",
+        lambda *_args: (state.display_frame, "test routing context"),
+    )
+    monkeypatch.setattr(app_module, "_build_optimization_report", lambda *_args: None)
+    monkeypatch.setattr(app_module, "render_admin_panel", lambda *_, **__: False)
     return containers, rerun, snapshot
 
 
-def _track_renderers(
-    monkeypatch: MonkeyPatch,
-    calls: list[str],
-    *renderers: tuple[str, str],
+def test_overview_does_not_build_routing_report(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_state: DashboardState,
 ) -> None:
-    """Record section composition without replacing application orchestration."""
-    for name, call_name in renderers:
-        monkeypatch.setattr(
-            app_module,
-            name,
-            lambda *_args, _call_name=call_name, **_kwargs: calls.append(_call_name),
-            raising=False,
-        )
+    """Catch Overview eagerly constructing the independent routing benchmark."""
+    _patch_render_app_shell(monkeypatch, dashboard_state)
+    monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda language: DashboardView.OVERVIEW,
+    )
+    build = Mock(side_effect=AssertionError("routing must be lazy"))
+    monkeypatch.setattr(app_module, "_build_optimization_report", build)
+
+    app_module.render_app()
+
+    build.assert_not_called()
+
+
+def test_routing_view_uses_unfiltered_context(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    """Catch display filters changing the full-history routing evidence."""
+    _patch_render_app_shell(monkeypatch, dashboard_state)
+    monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda language: DashboardView.ROUTING,
+    )
+    filters = Mock()
+    loaded_filters: list[DashboardFilters] = []
+    monkeypatch.setattr(app_module, "render_filter_bar", filters)
+    monkeypatch.setattr(
+        app_module,
+        "_render_repository_filters",
+        Mock(side_effect=AssertionError("routing must be unfiltered")),
+    )
+    snapshot = PandasDashboardRepository(dashboard_state.display_frame).fetch(
+        DashboardFilters(), PageRequest()
+    )
+    monkeypatch.setattr(
+        app_module,
+        "_load_snapshot",
+        lambda selected, *_: loaded_filters.append(selected) or snapshot,
+    )
+
+    app_module.render_app()
+
+    filters.assert_not_called()
+    assert loaded_filters == [DashboardFilters()]
+
+
+def test_routing_lineage_error_is_visible_as_error(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    """Catch invalid routing lineage being softened into a warning."""
+    _patch_render_app_shell(monkeypatch, dashboard_state)
+    monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda language: DashboardView.ROUTING,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "_build_optimization_report",
+        Mock(side_effect=ValueError("mixed simulation lineage")),
+    )
+    errors: list[str] = []
+    monkeypatch.setattr(app_module.st, "error", errors.append)
+    monkeypatch.setattr(app_module.st, "warning", Mock())
+
+    app_module.render_app()
+
+    assert errors == [
+        "Synthetic routing benchmark unavailable: mixed simulation lineage"
+    ]
 
 
 @pytest.mark.integration
@@ -551,23 +646,15 @@ def test_pagination_widget_does_not_override_session_state(
     number_inputs: list[dict[str, object]] = []
     _patch_render_app_shell(monkeypatch, dashboard_state)
     monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda language: DashboardView.TRANSACTIONS,
+    )
+    monkeypatch.setattr(
         app_module.st,
         "number_input",
         lambda *_, **kwargs: number_inputs.append(kwargs) or 1,
     )
-    for renderer in (
-        "render_story_hero",
-        "render_kpis",
-        "render_gateway_health",
-        "render_gateway_performance",
-        "render_success_trend",
-        "render_failure_analysis",
-        "render_ai_operations_brief",
-        "render_recent_transactions",
-        "render_interpretation_guide",
-    ):
-        monkeypatch.setattr(app_module, renderer, lambda *_, **__: None)
-    monkeypatch.setattr(app_module, "render_admin_panel", lambda *_, **__: False)
 
     app_module.render_app()
 
@@ -577,116 +664,51 @@ def test_pagination_widget_does_not_override_session_state(
 
 
 @pytest.mark.integration
-def test_story_first_composition_and_admin_rerun(
+def test_overview_renders_only_overview_view(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
 ) -> None:
-    expected = [
-        "hero",
-        "kpis",
-        "gateway_health",
-        "gateway_performance",
-        "success_trend",
-        "failure_analysis",
-        "ai",
-        "recent",
-        "guide",
-    ]
-    calls: list[str] = []
-    admin_snapshots: list[list[str]] = []
-    containers, rerun, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
-
-    def render_hero(
-        state: DashboardSnapshot,
-        database_source: str,
-        language: str,
-    ) -> None:
-        assert state is snapshot
-        assert database_source == "demo"
-        assert language == "my"
-        calls.append("hero")
-
-    def render_ai(
-        state: DashboardSnapshot,
-        language: str,
-        *,
-        filters: DashboardFilters,
-    ) -> None:
-        assert state is snapshot
-        assert language == "my"
-        assert filters == DashboardFilters()
-        calls.append("ai")
-
-    def render_admin(*_args: object, **_kwargs: object) -> bool:
-        admin_snapshots.append(calls.copy())
-        return True
-
-    monkeypatch.setattr(app_module, "render_story_hero", render_hero, raising=False)
-    monkeypatch.setattr(
-        app_module,
-        "render_kpis",
-        lambda *_args, **_kwargs: calls.append("kpis"),
-    )
-    monkeypatch.setattr(app_module, "render_ai_operations_brief", render_ai)
-    _track_renderers(
-        monkeypatch,
-        calls,
-        ("render_gateway_health", "gateway_health"),
-        ("render_gateway_performance", "gateway_performance"),
-        ("render_success_trend", "success_trend"),
-        ("render_failure_analysis", "failure_analysis"),
-        ("render_recent_transactions", "recent"),
-        ("render_interpretation_guide", "guide"),
-    )
-    monkeypatch.setattr(app_module, "render_admin_panel", render_admin)
+    _, rerun, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
+    overview = Mock()
+    blocked = Mock(side_effect=AssertionError("inactive view rendered"))
+    monkeypatch.setattr(app_module, "render_overview", overview)
+    monkeypatch.setattr(app_module, "render_gateways", blocked)
+    monkeypatch.setattr(app_module, "render_routing_lab", blocked)
+    monkeypatch.setattr(app_module, "render_transactions", blocked)
+    monkeypatch.setattr(app_module, "render_admin_panel", blocked)
 
     app_module.render_app()
 
-    assert calls == expected
-    assert admin_snapshots == [expected]
-    assert containers == [{"border": True}]
-    rerun.assert_called_once_with()
+    overview.assert_called_once_with(snapshot, "my")
+    blocked.assert_not_called()
+    rerun.assert_not_called()
 
 
 @pytest.mark.integration
-def test_empty_state_skips_data_sections_but_keeps_admin_manager(
+def test_admin_reruns_after_successful_mutation(
     monkeypatch: MonkeyPatch,
     dashboard_state: DashboardState,
 ) -> None:
-    empty_state = DashboardState(
-        dashboard_state.replay_frame,
-        dashboard_state.display_frame.iloc[0:0],
-        dashboard_state.alerts,
+    containers, rerun, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
+    monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda language: DashboardView.ADMIN,
     )
-    calls: list[str] = []
-    admin_snapshots: list[list[str]] = []
-    containers, _, _ = _patch_render_app_shell(monkeypatch, empty_state)
-
-    def render_admin(*_args: object, **_kwargs: object) -> bool:
-        admin_snapshots.append(calls.copy())
-        return False
-
-    _track_renderers(
-        monkeypatch,
-        calls,
-        ("render_story_hero", "hero"),
-        ("render_kpis", "kpis"),
-        ("render_ai_operations_brief", "ai"),
-        ("render_gateway_health", "gateway_health"),
-        ("render_empty_state", "empty_state"),
-        ("render_gateway_performance", "gateway_performance"),
-        ("render_success_trend", "success_trend"),
-        ("render_failure_analysis", "failure_analysis"),
-        ("render_recent_transactions", "recent"),
-        ("render_interpretation_guide", "guide"),
-    )
+    render_admin = Mock(return_value=True)
     monkeypatch.setattr(app_module, "render_admin_panel", render_admin)
 
     app_module.render_app()
 
-    assert calls == ["hero", "kpis", "gateway_health", "empty_state"]
-    assert admin_snapshots == [calls]
     assert containers == [{"border": True}]
+    render_admin.assert_called_once_with(
+        None,
+        snapshot.source,
+        snapshot.transactions,
+        "my",
+        os.getenv("ADMIN_PASSWORD_HASH"),
+    )
+    rerun.assert_called_once_with()
 
 
 @pytest.mark.integration

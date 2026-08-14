@@ -122,20 +122,19 @@ from payment_dashboard.transaction_service import (  # noqa: E402
     TRANSACTION_TYPES,
 )
 from payment_dashboard.ui.admin import render_admin_panel  # noqa: E402
-from payment_dashboard.ui.optimization import render_optimization_report  # noqa: E402
-from payment_dashboard.ui.sections import (  # noqa: E402
-    render_ai_operations_brief,
-    render_empty_state,
-    render_failure_analysis,
-    render_gateway_health,
-    render_gateway_performance,
-    render_interpretation_guide,
-    render_kpis,
-    render_recent_transactions,
-    render_story_hero,
-    render_success_trend,
+from payment_dashboard.ui.shell import (  # noqa: E402
+    FILTERED_VIEWS,
+    DashboardView,
+    render_filter_bar,
+    render_top_navigation,
 )
 from payment_dashboard.ui.style import apply_page_style  # noqa: E402
+from payment_dashboard.ui.views import (  # noqa: E402
+    render_gateways,
+    render_overview,
+    render_routing_lab,
+    render_transactions,
+)
 
 
 def build_dashboard_state(
@@ -574,105 +573,99 @@ def render_app() -> None:
     apply_page_style()
 
     language = _render_language_toggle()
-    st.title(translate("dashboard.title", language))
-    st.markdown(translate("dashboard.description", language))
-    st.caption(translate("dashboard.disclaimer", language))
-
-    filters = _render_repository_filters(language)
+    view = render_top_navigation(language)
+    filters = (
+        render_filter_bar(
+            language,
+            _reset_transaction_page,
+            _reset_repository_filters,
+        )
+        if view in FILTERED_VIEWS
+        else DashboardFilters()
+    )
     requested_page = int(st.session_state.get("transaction_page", 1))
     snapshot, page_number, total_pages = _load_valid_snapshot(
         filters,
         requested_page,
         language,
     )
-    st.number_input(
-        translate("pagination.page", language),
-        min_value=1,
-        step=1,
-        key="transaction_page",
-        disabled=True,
-    )
     _render_source_status(snapshot, language)
 
-    try:
-        optimization_frame, optimization_source = _load_optimization_contexts(
-            snapshot,
-            language,
+    if view is DashboardView.OVERVIEW:
+        render_overview(snapshot, language)
+    elif view is DashboardView.GATEWAYS:
+        render_gateways(snapshot, language)
+    elif view is DashboardView.ROUTING:
+        try:
+            optimization_frame, optimization_source = _load_optimization_contexts(
+                snapshot,
+                language,
+            )
+            optimization_report = _build_optimization_report(
+                optimization_frame,
+                optimization_source,
+            )
+        except ValueError as exc:
+            st.error(f"Synthetic routing benchmark unavailable: {exc}")
+        except Exception as exc:
+            diagnostic = classify_mongodb_error(exc)
+            if diagnostic == "unexpected":
+                raise
+            st.warning(
+                "Synthetic routing benchmark unavailable because the full active "
+                f"MongoDB history could not be read ({diagnostic})."
+            )
+        else:
+            render_routing_lab(optimization_report, language)
+    elif view is DashboardView.TRANSACTIONS:
+        st.number_input(
+            translate("pagination.page", language),
+            min_value=1,
+            step=1,
+            key="transaction_page",
+            disabled=True,
         )
-        optimization_report = _build_optimization_report(
-            optimization_frame,
-            optimization_source,
+        render_transactions(snapshot, language)
+        previous_column, next_column = st.columns(2)
+        previous_column.button(
+            translate("pagination.previous", language),
+            key="transaction_previous",
+            disabled=page_number <= 1,
+            on_click=_change_transaction_page,
+            args=(-1, total_pages),
         )
-    except ValueError as exc:
-        st.warning(f"Synthetic routing benchmark unavailable: {exc}")
-    except Exception as exc:
-        diagnostic = classify_mongodb_error(exc)
-        if diagnostic == "unexpected":
-            raise
-        st.warning(
-            "Synthetic routing benchmark unavailable because the full active "
-            f"MongoDB history could not be read ({diagnostic})."
+        next_column.button(
+            translate("pagination.next", language),
+            key="transaction_next",
+            disabled=page_number >= total_pages,
+            on_click=_change_transaction_page,
+            args=(1, total_pages),
+        )
+        st.caption(
+            translate(
+                "pagination.summary",
+                language,
+                page=page_number,
+                pages=total_pages,
+                total=snapshot.total_transactions,
+            )
         )
     else:
-        render_optimization_report(optimization_report, language)
-
-    render_story_hero(snapshot, snapshot.source.value, language)
-    render_kpis(snapshot, language)
-    render_gateway_health(snapshot.alerts, language)
-
-    if snapshot.total_transactions == 0:
-        render_empty_state(language)
-    else:
-        render_gateway_performance(snapshot, language)
-        trend_column, failure_column = st.columns(2)
-        with trend_column:
-            render_success_trend(snapshot, language)
-        with failure_column:
-            render_failure_analysis(snapshot, language)
-        render_ai_operations_brief(snapshot, language, filters=filters)
-        render_recent_transactions(snapshot.transactions, language, limit=None)
-        render_interpretation_guide(language)
-
-    previous_column, next_column = st.columns(2)
-    previous_column.button(
-        translate("pagination.previous", language),
-        key="transaction_previous",
-        disabled=page_number <= 1,
-        on_click=_change_transaction_page,
-        args=(-1, total_pages),
-    )
-    next_column.button(
-        translate("pagination.next", language),
-        key="transaction_next",
-        disabled=page_number >= total_pages,
-        on_click=_change_transaction_page,
-        args=(1, total_pages),
-    )
-    st.caption(
-        translate(
-            "pagination.summary",
-            language,
-            page=page_number,
-            pages=total_pages,
-            total=snapshot.total_transactions,
+        resources = (
+            _mongo_resources(_mongo_configuration_fingerprint())
+            if snapshot.source is DataSource.LIVE
+            else None
         )
-    )
-
-    resources = (
-        _mongo_resources(_mongo_configuration_fingerprint())
-        if snapshot.source is DataSource.LIVE
-        else None
-    )
-    admin_database = resources.database if resources is not None else None
-    with st.container(border=True):
-        if render_admin_panel(
-            admin_database,
-            snapshot.source,
-            snapshot.transactions,
-            language,
-            os.getenv("ADMIN_PASSWORD_HASH"),
-        ):
-            st.rerun()
+        admin_database = resources.database if resources is not None else None
+        with st.container(border=True):
+            if render_admin_panel(
+                admin_database,
+                snapshot.source,
+                snapshot.transactions,
+                language,
+                os.getenv("ADMIN_PASSWORD_HASH"),
+            ):
+                st.rerun()
 
 
 if __name__ == "__main__":

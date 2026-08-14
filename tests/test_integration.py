@@ -20,6 +20,7 @@ from payment_dashboard.app import build_dashboard_state
 from payment_dashboard.data_loader import load_transactions
 from payment_dashboard.prepare_data import assign_gateways
 from payment_dashboard.simulation import simulate_transactions
+from payment_dashboard.ui.shell import DashboardView
 
 
 def _run_prepared_app(
@@ -45,37 +46,40 @@ def test_language_toggle_preserves_filters_and_translates_reset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     app, _, _ = _run_prepared_app(tmp_path, monkeypatch)
-    english_gateway_options = app.sidebar.multiselect[0].options
+    english_gateway_options = app.multiselect[0].options
 
-    assert app.title[0].value == "Payment Success Monitor"
+    assert any("Payment Command Center" in item.value for item in app.markdown)
     assert app.toggle[0].label == "Language / ဘာသာစကား"
     assert "Current: English" in [caption.value for caption in app.caption]
-    assert app.sidebar.button[0].label == "Reset filters"
+    assert app.button[0].label == "Reset filters"
     assert not app.exception
 
-    app.sidebar.multiselect[0].set_value(["Gateway A"])
-    app.sidebar.multiselect[1].set_value(["Transfer"])
-    app.sidebar.multiselect[2].set_value(["Mobile"])
-    app.sidebar.multiselect[3].set_value(["Success"])
-    app.sidebar.date_input[0].set_value((date(2025, 6, 2), date(2025, 6, 3)))
+    app.multiselect[0].set_value(["Gateway A"])
+    app.multiselect[1].set_value(["Transfer"])
+    app.multiselect[2].set_value(["Mobile"])
+    app.multiselect[3].set_value(["Success"])
+    app.date_input[0].set_value((date(2025, 6, 2), date(2025, 6, 3)))
     app.run(timeout=10)
 
+    app.radio(key="dashboard_view").set_value(DashboardView.TRANSACTIONS).run(
+        timeout=10
+    )
     assert app.number_input(key="transaction_page").value == 1
 
     app.toggle[0].set_value(True).run(timeout=10)
 
-    assert app.title[0].value == "ငွေပေးချေမှု အောင်မြင်နှုန်း စောင့်ကြည့်စနစ်"
+    assert any("ငွေပေးချေမှု ကွပ်ကဲရေးစင်တာ" in item.value for item in app.markdown)
     assert app.toggle[0].label == "Language / ဘာသာစကား"
     assert "လက်ရှိ: မြန်မာ" in [caption.value for caption in app.caption]
-    assert app.sidebar.button[0].label == "စစ်ထုတ်မှုများ ပြန်လည်သတ်မှတ်ရန်"
+    assert app.button[0].label == "စစ်ထုတ်မှုများ ပြန်လည်သတ်မှတ်ရန်"
     assert not app.exception
-    assert app.sidebar.multiselect[0].options == english_gateway_options
+    assert app.multiselect[0].options == english_gateway_options
     assert app.number_input(key="transaction_page").value == 1
-    assert app.sidebar.multiselect[0].value == ["Gateway A"]
-    assert app.sidebar.multiselect[1].value == ["Transfer"]
-    assert app.sidebar.multiselect[2].value == ["Mobile"]
-    assert app.sidebar.multiselect[3].value == ["Success"]
-    assert app.sidebar.date_input[0].value == (
+    assert app.multiselect[0].value == ["Gateway A"]
+    assert app.multiselect[1].value == ["Transfer"]
+    assert app.multiselect[2].value == ["Mobile"]
+    assert app.multiselect[3].value == ["Success"]
+    assert app.date_input[0].value == (
         date(2025, 6, 2),
         date(2025, 6, 3),
     )
@@ -87,18 +91,21 @@ def test_reset_filters_button_restores_widget_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app, _, _ = _run_prepared_app(tmp_path, monkeypatch)
-    app.sidebar.multiselect[0].set_value(["Gateway A"])
-    app.sidebar.multiselect[1].set_value(["Transfer"])
-    app.sidebar.multiselect[2].set_value(["Mobile"])
-    app.sidebar.multiselect[3].set_value(["Success"])
-    app.sidebar.date_input[0].set_value((date(2025, 6, 2), date(2025, 6, 3)))
+    app.multiselect[0].set_value(["Gateway A"])
+    app.multiselect[1].set_value(["Transfer"])
+    app.multiselect[2].set_value(["Mobile"])
+    app.multiselect[3].set_value(["Success"])
+    app.date_input[0].set_value((date(2025, 6, 2), date(2025, 6, 3)))
     app.run(timeout=10)
 
-    app.sidebar.button[0].click().run(timeout=10)
+    app.button[0].click().run(timeout=10)
 
+    app.radio(key="dashboard_view").set_value(DashboardView.TRANSACTIONS).run(
+        timeout=10
+    )
     assert app.number_input(key="transaction_page").value == 1
-    assert [widget.value for widget in app.sidebar.multiselect] == [[], [], [], []]
-    assert app.sidebar.date_input[0].value == ()
+    assert [widget.value for widget in app.multiselect] == [[], [], [], []]
+    assert app.date_input[0].value == ()
     assert not app.exception
 
 
