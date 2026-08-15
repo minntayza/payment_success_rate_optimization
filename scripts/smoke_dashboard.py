@@ -28,6 +28,7 @@ DESKTOP_VIEWPORT = {"width": 1440, "height": 1000}
 NARROW_VIEWPORT = {"width": 390, "height": 844}
 OVERFLOW_EVALUATION = "document.documentElement.scrollWidth <= window.innerWidth"
 ADMIN_LOGIN_LABEL = "Sign in"
+ADMIN_EXPANDER_LABEL = "Administrator transaction manager"
 ADMIN_DEMO_DISABLED_LABEL = (
     "Database editing is unavailable while demo fallback data is active."
 )
@@ -102,6 +103,19 @@ def _capture_overview(page: Any, viewport_name: str) -> None:
 
 
 def _assert_admin_isolated(page: Any, *, demo_mode: bool) -> None:
+    if not demo_mode:
+        expander = page.get_by_text(ADMIN_EXPANDER_LABEL, exact=True)
+        _wait_for_visible(
+            expander,
+            "Live Admin did not expose its transaction manager",
+        )
+        try:
+            expander.click()
+        except Exception as exc:
+            raise SmokeCheckError(
+                "Live Admin transaction manager could not be opened"
+            ) from exc
+
     label = ADMIN_DEMO_DISABLED_LABEL if demo_mode else ADMIN_LOGIN_LABEL
     message = (
         "Demo Admin did not expose its disabled editing state"
@@ -148,12 +162,11 @@ def run_dashboard_smoke(
                 _select_view(page, label)
                 if label == "Overview":
                     _capture_overview(page, "desktop")
+                    page.set_viewport_size(NARROW_VIEWPORT)
+                    _capture_overview(page, "narrow")
+                    page.set_viewport_size(DESKTOP_VIEWPORT)
                 elif label == "Admin":
                     _assert_admin_isolated(page, demo_mode=demo_mode)
-
-            page.set_viewport_size(NARROW_VIEWPORT)
-            _select_view(page, "Overview")
-            _capture_overview(page, "narrow")
         finally:
             browser.close()
 

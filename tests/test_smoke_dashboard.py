@@ -22,6 +22,7 @@ VIEW_DESCRIPTIONS = {
 }
 DESKTOP_WIDTH = 1440
 NARROW_WIDTH = 390
+ADMIN_EXPANDER_LABEL = "Administrator transaction manager"
 
 
 @dataclass
@@ -106,6 +107,7 @@ class _Page:
         duplicate_text_labels: set[str] | None = None,
         delayed_navigation: bool = False,
         delayed_admin_content: bool = False,
+        admin_expanded: bool = False,
     ) -> None:
         self.response = response or _Response(ok=True, status=200)
         self.source_badge = (
@@ -131,6 +133,7 @@ class _Page:
         )
         self.delayed_navigation = delayed_navigation
         self.delayed_admin_content = delayed_admin_content
+        self.admin_expanded = admin_expanded
         self.admin_transition_pending = False
         self.active_view = "Overview"
         self.pending_view: str | None = None
@@ -187,8 +190,13 @@ class _Page:
                     ]
                 )
             return _Locator([])
+        if text == ADMIN_EXPANDER_LABEL and self.active_view == "Admin":
+            return self._admin_expander_locator(text)
         if text == "Sign in" and self.active_view == "Admin":
-            return self._admin_state_locator(text, visible=self.admin_login_visible)
+            return self._admin_state_locator(
+                text,
+                visible=self.admin_login_visible and self.admin_expanded,
+            )
         if text == (
             "Database editing is unavailable while demo fallback data is active."
         ) and (self.active_view == "Admin"):
@@ -246,6 +254,24 @@ class _Page:
                 )
             ]
         )
+
+    def _admin_expander_locator(self, text: str) -> _Locator:
+        if not self.admin_transition_pending:
+            return _Locator([_Element(text, on_click=self._open_admin_expander)])
+        return _Locator(
+            [
+                _Element(
+                    text,
+                    visible=False,
+                    visible_after_wait=True,
+                    on_click=self._open_admin_expander,
+                    on_wait=self._finish_admin_transition,
+                )
+            ]
+        )
+
+    def _open_admin_expander(self) -> None:
+        self.admin_expanded = True
 
     def _finish_admin_transition(self) -> None:
         self.admin_transition_pending = False
@@ -374,12 +400,15 @@ def test_browser_smoke_rejects_a_later_visible_exception() -> None:
 def test_browser_smoke_visits_all_views_and_captures_responsive_overview() -> None:
     """Skipping a destination or responsive capture breaks the shell contract."""
     module = _load_smoke_module()
-    page = _Page()
+    page = _Page(
+        source_badge=[_Element("DEMO Simulated demo data")],
+        admin_disabled_visible=True,
+    )
 
     _run(module, page)
 
-    assert page.clicked_views == [*NAVIGATION_LABELS, "Overview"]
-    assert page.viewport_widths == [DESKTOP_WIDTH, NARROW_WIDTH]
+    assert page.clicked_views == list(NAVIGATION_LABELS)
+    assert page.viewport_widths == [DESKTOP_WIDTH, NARROW_WIDTH, DESKTOP_WIDTH]
     assert page.screenshots == [
         ("Overview", DESKTOP_WIDTH),
         ("Overview", NARROW_WIDTH),
@@ -414,6 +443,17 @@ def test_browser_smoke_requires_sign_in_for_live_admin() -> None:
 
     with pytest.raises(module.SmokeCheckError, match="sign-in"):
         _run(module, page)
+
+
+@pytest.mark.integration
+def test_browser_smoke_expands_live_admin_before_waiting_for_sign_in() -> None:
+    """Live authentication is visible only after opening the Admin expander."""
+    module = _load_smoke_module()
+    page = _Page()
+
+    _run(module, page)
+
+    assert page.admin_expanded is True
 
 
 @pytest.mark.integration
@@ -461,7 +501,7 @@ def test_browser_smoke_waits_for_each_selected_view_to_render() -> None:
 
     _run(module, page)
 
-    assert page.active_view == "Overview"
+    assert page.active_view == "Admin"
     assert page.pending_view is None
 
 
