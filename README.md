@@ -35,7 +35,7 @@ limitations.
 - Reproducible Gateway A-D assignment
 - Strict CSV schema and value validation
 - Overall and gateway-level payment success metrics
-- Interactive filters for gateway, transaction type, device, status, and date
+- Compact top-bar filters for gateway, transaction type, device, status, and date
 - Server-side paginated transaction history
 - Latest-50 active-history gateway monitoring
 - Alerts for drops of at least 10 percentage points below baseline
@@ -47,11 +47,33 @@ limitations.
 - Hashed-password administrator login with create, edit, and soft-delete controls
 - Indexed MongoDB queries and transaction audit records
 
+## Dashboard interface
+
+The dashboard uses a dark command-center palette with bright operational status
+accents and five focused top-level views:
+
+- **Overview** — four primary KPIs, the success trend, compact gateway health,
+  and the latest transactions.
+- **Gateways** — gateway performance, failure analysis, and full health evidence.
+- **Routing Lab** — the synthetic routing benchmark, policy comparisons, and
+  robustness evidence.
+- **Transactions** — the complete filtered, server-paginated transaction table.
+- **Admin** — administrator sign-in and mutation controls when live MongoDB data
+  and an administrator password hash are configured; demo fallback remains
+  read-only.
+
+Overview, Gateways, and Transactions share a compact filter bar directly below
+the top navigation. Routing Lab intentionally uses the complete active routing
+context, while Admin is isolated from analytical KPI cards and filters. Gateway
+assignments, outcomes, and routing recommendations remain controlled synthetic
+simulation results in every view; the redesign does not turn them into evidence
+about real banks or payment gateways.
+
 ## Dashboard previews
 
 | Desktop dashboard | Mobile dashboard |
 | --- | --- |
-| ![Playful Analyst desktop dashboard](docs/images/dashboard-playful-desktop.jpg) | ![Responsive Playful Analyst mobile dashboard](docs/images/dashboard-playful-mobile.jpg) |
+| ![Payment command center desktop dashboard](docs/images/dashboard-playful-desktop.jpg) | ![Responsive payment command center mobile dashboard](docs/images/dashboard-playful-mobile.jpg) |
 
 ## Requirements
 
@@ -200,9 +222,13 @@ ARROW_DEFAULT_MEMORY_POOL=system make run
 DASHBOARD_URL=http://localhost:8501 make smoke
 ```
 
-The smoke check uses headless Chromium and fails on a load error, a missing
-visible source badge or core KPI labels, or a rendered Streamlit exception.
-It is intentionally separate from the default test suite.
+The smoke check defaults to `http://localhost:8501`, uses headless Chromium, and
+selects all five top-level views. It captures the Overview at desktop and narrow
+widths in memory, rejects horizontal page overflow or rendered Streamlit
+exceptions, and verifies that Admin does not retain Overview KPI cards. A live
+data run requires the Admin sign-in control; a safe demo-mode run requires the
+documented read-only Admin notice. The browser check is intentionally separate
+from the default test suite.
 
 ## Start the web app
 
@@ -215,24 +241,27 @@ automatically. Stop the server with `Ctrl+C`.
 
 ## Use the dashboard
 
-1. Use the English/မြန်မာ switch above the title to choose the dashboard
+1. Use the English/မြန်မာ switch above the navigation to choose the dashboard
    language. Gateway names and transaction category values remain unchanged.
-2. Use sidebar filters to narrow the displayed KPIs, charts, and transaction
-   table.
-3. Click **Generate AI Brief** for a summary of the current filtered view in the
+2. Select **Overview**, **Gateways**, **Routing Lab**, **Transactions**, or
+   **Admin** in the top navigation to open one focused workflow.
+3. In Overview, Gateways, or Transactions, use the compact filter bar to narrow
+   the displayed KPIs, charts, and transaction table.
+4. Click **Generate AI Brief** for a summary of the current filtered view in the
    active dashboard language. The output is retained until the underlying
    metrics or language change. Switching languages invalidates the previous
    brief, so generate a new one after the switch.
-4. Expand **Evidence sent to the AI model** to compare the generated text
+5. Expand **Evidence sent to the AI model** to compare the generated text
    with the exact aggregate facts supplied to MiMo.
-5. Review Gateway Health to compare each baseline with its latest 50 active
+6. Open Gateways and review Gateway Health to compare each baseline with its latest 50 active
    transactions.
-6. Use Failure Analysis to investigate patterns by latency band.
-7. Use Recent Transactions to inspect individual records. The table is a
+7. Use Failure Analysis to investigate patterns by latency band.
+8. Open Transactions to inspect individual records. The table is a
    bounded server-side page; use the Previous and Next controls to navigate,
    and changing repository filters returns to page 1.
-8. The administrator can expand **Administrator transaction manager**, enter the
-   configured password, and create, edit, or soft-delete simulated records.
+9. In Admin, the administrator can expand **Administrator transaction manager**,
+   enter the configured password, and create, edit, or soft-delete simulated
+   records when live MongoDB data is active.
 
 The AI brief follows the active dashboard language, uses simulated gateway data,
 and is not real financial or routing advice. If configuration is missing or the
