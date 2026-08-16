@@ -177,4 +177,5 @@ class OptimizationReport:
     confidence_intervals: Mapping[str, object] | None = None
     run_id: str = "unpersisted"
     source_label: str = "independent local benchmark"
+    input_digest: str = "unpersisted"
     sensitivity_evidence: pd.DataFrame = field(default_factory=pd.DataFrame)

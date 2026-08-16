@@ -1,5 +1,6 @@
 """Tests for the command-center navigation shell."""
 
+from contextlib import nullcontext
 from unittest.mock import Mock
 
 import pytest
@@ -39,3 +40,50 @@ def test_filter_bar_returns_repository_filters(
     monkeypatch.setattr(shell.st, "button", Mock())
 
     assert render_filter_bar("en", Mock(), Mock()) == DashboardFilters()
+
+
+def test_filter_bar_restores_values_after_widget_is_hidden_for_a_rerun(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Routing/Admin visits must not erase analytical filter selections."""
+    session: dict[str, object] = {}
+    selected_gateway = False
+
+    def multiselect(*_args: object, **kwargs: object) -> list[str]:
+        nonlocal selected_gateway
+        key = str(kwargs["key"])
+        if key == "gateway_filter" and not selected_gateway:
+            selected_gateway = True
+            session[key] = ["Gateway C"]
+            callback = kwargs["on_change"]
+            callback(*kwargs.get("args", ()))
+        return list(session.get(key, []))
+
+    monkeypatch.setattr(shell.st, "session_state", session)
+    monkeypatch.setattr(shell.st, "container", lambda **_kwargs: nullcontext())
+    monkeypatch.setattr(
+        shell.st,
+        "columns",
+        lambda _count: tuple(nullcontext() for _ in range(5)),
+    )
+    monkeypatch.setattr(shell.st, "multiselect", multiselect)
+    monkeypatch.setattr(
+        shell.st,
+        "date_input",
+        lambda *_args, **kwargs: session.get(str(kwargs["key"]), []),
+    )
+    monkeypatch.setattr(shell.st, "button", Mock())
+
+    selected = render_filter_bar("en", Mock(), Mock())
+    for key in (
+        "gateway_filter",
+        "transaction_type_filter",
+        "device_filter",
+        "status_filter",
+        "date_filter",
+    ):
+        session.pop(key, None)
+    restored = render_filter_bar("en", Mock(), Mock())
+
+    assert selected.gateways == ("Gateway C",)
+    assert restored == selected

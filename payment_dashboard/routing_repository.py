@@ -89,6 +89,7 @@ class PandasRoutingRepository:
             report,
             run_id=manifest.run_id,
             source_label=source_label,
+            input_digest=manifest.artifact_digests["contexts"],
             sensitivity_evidence=sensitivity_evidence,
         )
 

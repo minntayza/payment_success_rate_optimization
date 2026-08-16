@@ -92,6 +92,7 @@ def test_repository_manifest_records_synthetic_timeline(tmp_path: Path) -> None:
         "Device Used",
     ]
     assert manifest["configuration"]["state_version"] == "gateway-state-v3"
+    assert report.input_digest == manifest["artifact_digests"]["contexts"]
     persisted = pd.read_csv(tmp_path / report.run_id / "contexts.csv")
     assert persisted.columns.tolist() == manifest["configuration"]["context_columns"]
     assert "Sender Account ID" not in persisted

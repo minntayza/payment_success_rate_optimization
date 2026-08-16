@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, Mock
 import pandas as pd
 import pytest
 import streamlit as st
+from pandas.io.formats.style import Styler
 from pymongo.errors import ConnectionFailure
 from pytest import MonkeyPatch, fixture
 from streamlit.testing.v1 import AppTest
@@ -472,6 +473,33 @@ def test_snapshot_page_is_clamped_and_refetched_after_total_shrinks(
     pd.testing.assert_frame_equal(snapshot.transactions, valid_page.transactions)
 
 
+def test_overview_always_loads_the_first_transaction_page(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    """Overview recent records must not reuse Transactions pagination state."""
+    _, _, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
+    app_module.st.session_state["transaction_page"] = 3
+    monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda language: DashboardView.OVERVIEW,
+    )
+    requested_pages: list[int] = []
+    monkeypatch.setattr(
+        app_module,
+        "_load_snapshot",
+        lambda _filters, page, _language: (
+            requested_pages.append(page.number) or snapshot
+        ),
+    )
+
+    app_module.render_app()
+
+    assert requested_pages == [1]
+    assert app_module.st.session_state["transaction_page"] == 3
+
+
 def _patch_render_app_shell(
     monkeypatch: MonkeyPatch,
     state: DashboardState,
@@ -574,6 +602,28 @@ def test_overview_does_not_build_routing_report(
     app_module.render_app()
 
     build.assert_not_called()
+
+
+def test_overview_passes_selected_filters_to_ai_brief_workflow(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    """The focused Overview workflow must retain its analytical filter context."""
+    _patch_render_app_shell(monkeypatch, dashboard_state)
+    selected = DashboardFilters(gateways=("Gateway B",), statuses=("Failed",))
+    monkeypatch.setattr(
+        app_module,
+        "render_top_navigation",
+        lambda language: DashboardView.OVERVIEW,
+    )
+    monkeypatch.setattr(app_module, "render_filter_bar", Mock(return_value=selected))
+    overview = Mock()
+    monkeypatch.setattr(app_module, "render_overview", overview)
+
+    app_module.render_app()
+
+    overview.assert_called_once()
+    assert overview.call_args.args[2] == selected
 
 
 def test_routing_view_uses_unfiltered_context(
@@ -719,11 +769,13 @@ def test_active_view_renders_exactly_one_workflow(
             renderer.assert_not_called()
     rerun.assert_not_called()
 
-    if view in {
-        DashboardView.OVERVIEW,
-        DashboardView.GATEWAYS,
-        DashboardView.TRANSACTIONS,
-    }:
+    if view is DashboardView.OVERVIEW:
+        renderers[expected_renderer].assert_called_once_with(
+            snapshot,
+            "my",
+            DashboardFilters(),
+        )
+    elif view in {DashboardView.GATEWAYS, DashboardView.TRANSACTIONS}:
         renderers[expected_renderer].assert_called_once_with(snapshot, "my")
     elif view is DashboardView.ROUTING:
         renderers[expected_renderer].assert_called_once_with(None, "my")
@@ -889,10 +941,15 @@ def test_reset_clears_only_display_filter_widget_state(
     reset = getattr(app_module, "_reset_display_filters", None)
     session = {
         "gateway_filter": ["Gateway A"],
+        "gateway_filter_value": ["Gateway A"],
         "transaction_type_filter": ["Transfer"],
+        "transaction_type_filter_value": ["Transfer"],
         "device_filter": ["Mobile"],
+        "device_filter_value": ["Mobile"],
         "status_filter": ["Success"],
+        "status_filter_value": ["Success"],
         "date_filter": (date(2025, 6, 1), date(2025, 6, 2)),
+        "date_filter_value": (date(2025, 6, 1), date(2025, 6, 2)),
         "replay_count": 120,
         "language_toggle": True,
         "ai_brief_text": "keep",
@@ -912,6 +969,7 @@ def test_reset_clears_only_display_filter_widget_state(
         "date_filter",
     ):
         assert key not in session
+        assert f"{key}_value" not in session
     assert session == {
         "replay_count": 120,
         "language_toggle": True,
@@ -1079,7 +1137,7 @@ def test_gateway_health_keeps_gateway_values(
 def test_recent_transactions_localizes_headers_without_changing_values(
     monkeypatch: MonkeyPatch, dashboard_state: DashboardState
 ) -> None:
-    captured: list[pd.DataFrame] = []
+    captured: list[object] = []
     monkeypatch.setattr(
         "payment_dashboard.ui.sections.st.dataframe",
         lambda frame, **_: captured.append(frame),
@@ -1102,7 +1160,9 @@ def test_recent_transactions_localizes_headers_without_changing_values(
 
     render_recent_transactions(dashboard_state.display_frame, language="my")
 
-    displayed = captured[0]
+    presented = captured[0]
+    assert isinstance(presented, Styler)
+    displayed = presented.data
     assert list(displayed.columns) == [
         "ငွေပေးချေမှု ID",
         "အချိန်မှတ်တမ်း",
@@ -1117,6 +1177,44 @@ def test_recent_transactions_localizes_headers_without_changing_values(
     pd.testing.assert_frame_equal(
         displayed.set_axis(expected.columns, axis="columns"), expected
     )
+
+
+def test_transaction_table_styles_status_and_fraud_without_mutating_values(
+    monkeypatch: MonkeyPatch,
+    dashboard_state: DashboardState,
+) -> None:
+    """Semantic transaction evidence must remain raw beneath visual treatment."""
+    captured: list[tuple[object, dict[str, object]]] = []
+    original = dashboard_state.display_frame.copy(deep=True)
+    monkeypatch.setattr(
+        sections_module.st,
+        "dataframe",
+        lambda frame, **kwargs: captured.append((frame, kwargs)),
+    )
+
+    render_recent_transactions(dashboard_state.display_frame, language="en")
+
+    presented, options = captured[0]
+    assert isinstance(presented, Styler)
+    assert (
+        presented.data["Transaction Status"].tolist()
+        == original.sort_values("Timestamp", ascending=False)
+        .head(25)["Transaction Status"]
+        .tolist()
+    )
+    assert (
+        presented.data["Fraud Flag"].tolist()
+        == original.sort_values("Timestamp", ascending=False)
+        .head(25)["Fraud Flag"]
+        .tolist()
+    )
+    column_config = options["column_config"]
+    assert column_config["Transaction Status"]["type_config"]["type"] == "text"
+    assert column_config["Fraud Flag"]["type_config"]["type"] == "checkbox"
+    rendered_styles = presented.to_html()
+    assert "#34D399" in rendered_styles
+    assert "#FB7185" in rendered_styles
+    pd.testing.assert_frame_equal(dashboard_state.display_frame, original)
 
 
 @pytest.mark.integration

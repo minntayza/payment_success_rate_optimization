@@ -12,6 +12,7 @@ from payment_dashboard.routing_models import (
 )
 from payment_dashboard.routing_statistics import ConfidenceInterval
 from payment_dashboard.ui import optimization
+from payment_dashboard.ui.chart_theme import CHART_TRACE_COLORS
 
 
 def test_optimization_ui_discloses_benchmark_and_policies(monkeypatch) -> None:
@@ -80,6 +81,7 @@ def test_optimization_ui_discloses_benchmark_and_policies(monkeypatch) -> None:
             "uniform_random": ConfidenceInterval(13.0, 2.0, 20.0, False),
             "greedy_utility": ConfidenceInterval(13.0, -1.0, 21.0, True),
         },
+        input_digest="contexts-sha256-deadbeef",
     )
     markdown = MagicMock()
     monkeypatch.setattr(optimization.st, "markdown", markdown)
@@ -97,6 +99,7 @@ def test_optimization_ui_discloses_benchmark_and_policies(monkeypatch) -> None:
     assert "advantage over greedy" in rendered
     assert "13.0" in rendered
     assert "Test period" in captions
+    assert "Input digest: contexts-sha256-deadbeef" in captions
     assert "synthetic timeline" in captions.lower()
     assert "moving-block" in captions.lower()
     uncertainty = optimization.st.dataframe.call_args_list[-1].args[0]
@@ -178,6 +181,8 @@ def test_optimization_ui_uses_myanmar_copy(monkeypatch) -> None:
     assert "SYNTHETIC BENCHMARK" not in rendered
     assert "Payment routing optimization" not in rendered
     assert "Change from baselines" not in rendered
+    assert "ထည့်သွင်းဒေတာ digest" in rendered
+    assert "Input digest" not in rendered
     table_columns = {
         str(column)
         for call in optimization.st.dataframe.call_args_list
@@ -276,3 +281,4 @@ def test_optimization_cumulative_chart_uses_shared_dark_theme(monkeypatch) -> No
     assert chart.layout.plot_bgcolor == "rgba(0,0,0,0)"
     assert chart.layout.xaxis.gridcolor == "#24364B"
     assert list(chart.data[0].y) == [4.0, 10.0]
+    assert tuple(trace.line.color for trace in chart.data) == CHART_TRACE_COLORS[:2]

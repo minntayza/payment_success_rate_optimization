@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import streamlit as st
 
+from payment_dashboard.dashboard_repository import DashboardFilters
 from payment_dashboard.i18n import Language
 from payment_dashboard.models import DashboardSnapshot
 from payment_dashboard.routing_models import OptimizationReport
 from payment_dashboard.ui.optimization import render_optimization_report
 from payment_dashboard.ui.sections import (
+    render_ai_operations_brief,
     render_empty_state,
     render_failure_analysis,
     render_gateway_health,
@@ -26,7 +28,11 @@ def _is_empty(snapshot: DashboardSnapshot) -> bool:
     return snapshot.transactions.empty
 
 
-def render_overview(snapshot: DashboardSnapshot, language: Language) -> None:
+def render_overview(
+    snapshot: DashboardSnapshot,
+    language: Language,
+    filters: DashboardFilters | None = None,
+) -> None:
     """Render the at-a-glance payment operations summary."""
     if _is_empty(snapshot):
         render_empty_state(language)
@@ -39,6 +45,11 @@ def render_overview(snapshot: DashboardSnapshot, language: Language) -> None:
     with health:
         render_gateway_health_summary(snapshot.alerts, language)
     render_recent_transactions(snapshot.transactions, language, limit=8)
+    render_ai_operations_brief(
+        snapshot,
+        language,
+        filters=filters or DashboardFilters(),
+    )
 
 
 def render_gateways(snapshot: DashboardSnapshot, language: Language) -> None:

@@ -17,12 +17,11 @@ ERROR_DETAIL_SELECTOR = (
 )
 REQUIRED_KPI_LABELS = ("Transactions", "Success rate")
 NAVIGATION_LABELS = ("Overview", "Gateways", "Routing Lab", "Transactions", "Admin")
-VIEW_READY_TEXT = {
-    "Overview": "Live payment health at a glance.",
-    "Gateways": "Compare gateway performance and alerts.",
-    "Routing Lab": "Optimize payment routing decisions.",
-    "Transactions": "Inspect filtered payment activity.",
-    "Admin": "Manage dashboard access and payments.",
+VIEW_CONTENT_TEXT = {
+    "Overview": "AI operations brief",
+    "Gateways": "Gateway performance",
+    "Routing Lab": "Payment routing optimization",
+    "Transactions": "How to interpret this dashboard",
 }
 DESKTOP_VIEWPORT = {"width": 1440, "height": 1000}
 NARROW_VIEWPORT = {"width": 390, "height": 844}
@@ -75,7 +74,7 @@ def _assert_required_kpis(page: Any) -> None:
             raise SmokeCheckError(f"Dashboard is missing visible KPI label: {label}")
 
 
-def _select_view(page: Any, label: str) -> None:
+def _select_view(page: Any, label: str, *, demo_mode: bool) -> None:
     navigation_item = page.locator(NAVIGATION_SELECTOR).get_by_text(label, exact=True)
     _wait_for_visible(
         navigation_item,
@@ -86,18 +85,26 @@ def _select_view(page: Any, label: str) -> None:
     except Exception as exc:
         raise SmokeCheckError(f"Dashboard could not select view: {label}") from exc
     page.wait_for_timeout(VIEW_SETTLE_MS)
+    ready_text = (
+        ADMIN_DEMO_DISABLED_LABEL
+        if label == "Admin" and demo_mode
+        else ADMIN_EXPANDER_LABEL
+        if label == "Admin"
+        else VIEW_CONTENT_TEXT[label]
+    )
     _wait_for_visible(
-        page.get_by_text(VIEW_READY_TEXT[label], exact=True),
+        page.get_by_text(ready_text, exact=True),
         f"Dashboard view did not finish rendering: {label}",
     )
     _assert_no_visible_errors(page)
 
 
-def _capture_overview(page: Any, viewport_name: str) -> None:
-    _assert_required_kpis(page)
+def _capture_view(page: Any, label: str, viewport_name: str) -> None:
+    if label == "Overview":
+        _assert_required_kpis(page)
     if not page.evaluate(OVERFLOW_EVALUATION):
         raise SmokeCheckError(
-            f"Overview has horizontal overflow at the {viewport_name} viewport"
+            f"{label} has horizontal overflow at the {viewport_name} viewport"
         )
     page.screenshot(full_page=True)
 
@@ -159,13 +166,12 @@ def run_dashboard_smoke(
             demo_mode = "DEMO" in visible_source_badge.inner_text().upper()
 
             for label in NAVIGATION_LABELS:
-                _select_view(page, label)
-                if label == "Overview":
-                    _capture_overview(page, "desktop")
-                    page.set_viewport_size(NARROW_VIEWPORT)
-                    _capture_overview(page, "narrow")
-                    page.set_viewport_size(DESKTOP_VIEWPORT)
-                elif label == "Admin":
+                _select_view(page, label, demo_mode=demo_mode)
+                _capture_view(page, label, "desktop")
+                page.set_viewport_size(NARROW_VIEWPORT)
+                _capture_view(page, label, "narrow")
+                page.set_viewport_size(DESKTOP_VIEWPORT)
+                if label == "Admin":
                     _assert_admin_isolated(page, demo_mode=demo_mode)
         finally:
             browser.close()

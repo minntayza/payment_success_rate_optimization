@@ -16,11 +16,16 @@ from payment_dashboard.ai_brief import (
     generate_brief_result,
 )
 from payment_dashboard.analytics import summary_metrics
-from payment_dashboard.config import CHART_COLORS
 from payment_dashboard.dashboard_repository import DashboardFilters
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.models import DashboardSnapshot, DashboardState, DataSource
-from payment_dashboard.ui.chart_theme import apply_chart_theme
+from payment_dashboard.ui.chart_theme import (
+    ANALYTICAL_COLOR,
+    CHART_TRACE_COLORS,
+    CRITICAL_COLOR,
+    HEALTHY_COLOR,
+    apply_chart_theme,
+)
 from payment_dashboard.ui.charts import (
     FAILURE_DIMENSIONS,
     failure_breakdown_chart,
@@ -224,6 +229,20 @@ def render_ai_operations_brief(
 def _normalized_filter_values(values: tuple[str, ...]) -> tuple[str, ...]:
     """Return set-valued filters in one deterministic cache-key order."""
     return tuple(sorted(set(values)))
+
+
+def _status_badge_style(value: object) -> str:
+    """Return semantic cell styling without changing the transaction value."""
+    if value == "Success":
+        color = HEALTHY_COLOR
+    elif value == "Failed":
+        color = CRITICAL_COLOR
+    else:
+        return ""
+    return (
+        f"background-color: {color}; color: #07111F; font-weight: 700; "
+        "border-radius: 999px"
+    )
 
 
 def render_kpis(
@@ -440,7 +459,7 @@ def render_gateway_performance(
             x="Bank Gateway",
             y="success_rate",
             color="Bank Gateway",
-            color_discrete_sequence=CHART_COLORS,
+            color_discrete_sequence=CHART_TRACE_COLORS,
             title=translate("charts.success_rate_by_gateway", language),
             range_y=[0, 1],
             text_auto=".1%",
@@ -453,7 +472,7 @@ def render_gateway_performance(
             x="Bank Gateway",
             y="transaction_count",
             color="Bank Gateway",
-            color_discrete_sequence=CHART_COLORS,
+            color_discrete_sequence=CHART_TRACE_COLORS,
             title=translate("charts.transaction_volume_by_gateway", language),
             text_auto=True,
             labels=labels,
@@ -481,7 +500,7 @@ def render_success_trend(
             x="Timestamp",
             y="success_rate",
             markers=True,
-            color_discrete_sequence=["#2563EB"],
+            color_discrete_sequence=[ANALYTICAL_COLOR],
             title=translate("charts.success_trend", language),
             labels=labels,
         )
@@ -510,7 +529,7 @@ def render_failure_analysis(
                 language,
                 title=translate("dimensions.latency_band", language).lower(),
             ),
-            color_discrete_sequence=["#F97316"],
+            color_discrete_sequence=[CRITICAL_COLOR],
             text_auto=True,
             labels=labels,
         )
@@ -542,10 +561,26 @@ def render_recent_transactions(
             for column, key in RECENT_COLUMN_KEYS.items()
         }
     )
+    status_column = translate("table.transaction_status", language)
+    fraud_column = translate("table.fraud_flag", language)
+    styled = display.style.map(
+        _status_badge_style,
+        subset=[status_column],
+    )
     st.dataframe(
-        display,
+        styled,
         width="stretch",
         hide_index=True,
+        column_config={
+            status_column: st.column_config.TextColumn(
+                status_column,
+                disabled=True,
+            ),
+            fraud_column: st.column_config.CheckboxColumn(
+                fraud_column,
+                disabled=True,
+            ),
+        },
     )
 
 

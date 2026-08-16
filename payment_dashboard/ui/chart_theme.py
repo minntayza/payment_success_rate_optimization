@@ -4,6 +4,17 @@ from __future__ import annotations
 
 import plotly.graph_objects as go
 
+ANALYTICAL_COLOR = "#22D3EE"
+HEALTHY_COLOR = "#34D399"
+WARNING_COLOR = "#FBBF24"
+CRITICAL_COLOR = "#FB7185"
+CHART_TRACE_COLORS = (
+    ANALYTICAL_COLOR,
+    HEALTHY_COLOR,
+    WARNING_COLOR,
+    CRITICAL_COLOR,
+)
+
 
 def apply_chart_theme(
     figure: go.Figure, *, show_legend: bool | None = None
@@ -15,6 +26,7 @@ def apply_chart_theme(
         "font": {"color": "#F8FAFC", "family": "Inter, sans-serif"},
         "hoverlabel": {"bgcolor": "#122235", "font_color": "#F8FAFC"},
         "margin": {"l": 40, "r": 20, "t": 56, "b": 40},
+        "colorway": CHART_TRACE_COLORS,
     }
     if show_legend is not None:
         layout["showlegend"] = show_legend

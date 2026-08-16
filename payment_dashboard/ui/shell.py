@@ -25,6 +25,27 @@ class DashboardView(StrEnum):
 FILTERED_VIEWS = frozenset(
     {DashboardView.OVERVIEW, DashboardView.GATEWAYS, DashboardView.TRANSACTIONS}
 )
+FILTER_WIDGET_KEYS = (
+    "gateway_filter",
+    "transaction_type_filter",
+    "device_filter",
+    "status_filter",
+    "date_filter",
+)
+
+
+def _persist_filter_value(widget_key: str, on_change: Callable[[], None]) -> None:
+    """Mirror an ephemeral widget value before its view can hide it."""
+    st.session_state[f"{widget_key}_value"] = st.session_state[widget_key]
+    on_change()
+
+
+def _restore_filter_values() -> None:
+    """Rehydrate widget keys Streamlit removed while their view was hidden."""
+    for widget_key in FILTER_WIDGET_KEYS:
+        persisted_key = f"{widget_key}_value"
+        if widget_key not in st.session_state and persisted_key in st.session_state:
+            st.session_state[widget_key] = st.session_state[persisted_key]
 
 
 def active_view() -> DashboardView:
@@ -57,6 +78,7 @@ def render_filter_bar(
     on_reset: Callable[[], None],
 ) -> DashboardFilters:
     """Render compact repository filters while retaining stable widget keys."""
+    _restore_filter_values()
     with st.container(border=True):
         gateway_column, type_column, device_column, status_column, date_column = (
             st.columns(5)
@@ -67,7 +89,8 @@ def render_filter_bar(
                 sorted(GATEWAYS),
                 placeholder=translate("sidebar.all_gateways", language),
                 key="gateway_filter",
-                on_change=on_change,
+                on_change=_persist_filter_value,
+                args=("gateway_filter", on_change),
             )
         with type_column:
             transaction_types = st.multiselect(
@@ -75,7 +98,8 @@ def render_filter_bar(
                 sorted(TRANSACTION_TYPES),
                 placeholder=translate("sidebar.all_transaction_types", language),
                 key="transaction_type_filter",
-                on_change=on_change,
+                on_change=_persist_filter_value,
+                args=("transaction_type_filter", on_change),
             )
         with device_column:
             devices = st.multiselect(
@@ -83,7 +107,8 @@ def render_filter_bar(
                 sorted(DEVICES),
                 placeholder=translate("sidebar.all_devices", language),
                 key="device_filter",
-                on_change=on_change,
+                on_change=_persist_filter_value,
+                args=("device_filter", on_change),
             )
         with status_column:
             statuses = st.multiselect(
@@ -91,14 +116,16 @@ def render_filter_bar(
                 sorted(STATUSES),
                 placeholder=translate("sidebar.all_statuses", language),
                 key="status_filter",
-                on_change=on_change,
+                on_change=_persist_filter_value,
+                args=("status_filter", on_change),
             )
         with date_column:
             selected_dates = st.date_input(
                 translate("sidebar.date_range", language),
                 value=[],
                 key="date_filter",
-                on_change=on_change,
+                on_change=_persist_filter_value,
+                args=("date_filter", on_change),
             )
             st.button(
                 translate("shell.reset_filters", language),

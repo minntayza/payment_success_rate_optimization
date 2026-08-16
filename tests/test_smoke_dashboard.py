@@ -20,6 +20,12 @@ VIEW_DESCRIPTIONS = {
     "Transactions": "Inspect filtered payment activity.",
     "Admin": "Manage dashboard access and payments.",
 }
+VIEW_CONTENT_TEXT = {
+    "Overview": "AI operations brief",
+    "Gateways": "Gateway performance",
+    "Routing Lab": "Payment routing optimization",
+    "Transactions": "How to interpret this dashboard",
+}
 DESKTOP_WIDTH = 1440
 NARROW_WIDTH = 390
 ADMIN_EXPANDER_LABEL = "Administrator transaction manager"
@@ -104,10 +110,12 @@ class _Page:
         admin_disabled_visible: bool = False,
         admin_metrics: list[_Element] | None = None,
         overflowing_widths: set[int] | None = None,
+        overflowing_layouts: set[tuple[str, int]] | None = None,
         duplicate_text_labels: set[str] | None = None,
         delayed_navigation: bool = False,
         delayed_admin_content: bool = False,
         admin_expanded: bool = False,
+        missing_view_content: set[str] | None = None,
     ) -> None:
         self.response = response or _Response(ok=True, status=200)
         self.source_badge = (
@@ -128,12 +136,18 @@ class _Page:
         self.overflowing_widths = (
             set() if overflowing_widths is None else overflowing_widths
         )
+        self.overflowing_layouts = (
+            set() if overflowing_layouts is None else overflowing_layouts
+        )
         self.duplicate_text_labels = (
             set() if duplicate_text_labels is None else duplicate_text_labels
         )
         self.delayed_navigation = delayed_navigation
         self.delayed_admin_content = delayed_admin_content
         self.admin_expanded = admin_expanded
+        self.missing_view_content = (
+            set() if missing_view_content is None else missing_view_content
+        )
         self.admin_transition_pending = False
         self.active_view = "Overview"
         self.pending_view: str | None = None
@@ -190,12 +204,61 @@ class _Page:
                     ]
                 )
             return _Locator([])
+        if text in VIEW_CONTENT_TEXT.values():
+            label = next(
+                name
+                for name, content_text in VIEW_CONTENT_TEXT.items()
+                if text == content_text
+            )
+            if label in self.missing_view_content:
+                return _Locator([])
+            if label == self.active_view:
+                return _Locator([_Element(text)])
+            if label == self.pending_view:
+                return _Locator(
+                    [
+                        _Element(
+                            text,
+                            visible=False,
+                            visible_after_wait=True,
+                            on_wait=self._apply_pending_view,
+                        )
+                    ]
+                )
+            return _Locator([])
+        if text == ADMIN_EXPANDER_LABEL and self.pending_view == "Admin":
+            return _Locator(
+                [
+                    _Element(
+                        text,
+                        visible=False,
+                        visible_after_wait=True,
+                        on_click=self._open_admin_expander,
+                        on_wait=self._apply_pending_view,
+                    )
+                ]
+            )
         if text == ADMIN_EXPANDER_LABEL and self.active_view == "Admin":
             return self._admin_expander_locator(text)
         if text == "Sign in" and self.active_view == "Admin":
             return self._admin_state_locator(
                 text,
                 visible=self.admin_login_visible and self.admin_expanded,
+            )
+        if (
+            text
+            == ("Database editing is unavailable while demo fallback data is active.")
+            and self.pending_view == "Admin"
+        ):
+            return _Locator(
+                [
+                    _Element(
+                        text,
+                        visible=False,
+                        visible_after_wait=self.admin_disabled_visible,
+                        on_wait=self._apply_pending_view,
+                    )
+                ]
             )
         if text == (
             "Database editing is unavailable while demo fallback data is active."
@@ -220,7 +283,10 @@ class _Page:
         assert expression == (
             "document.documentElement.scrollWidth <= window.innerWidth"
         )
-        return self.viewport_width not in self.overflowing_widths
+        return (
+            self.viewport_width not in self.overflowing_widths
+            and (self.active_view, self.viewport_width) not in self.overflowing_layouts
+        )
 
     def screenshot(self, *, full_page: bool) -> bytes:
         assert full_page
@@ -397,8 +463,8 @@ def test_browser_smoke_rejects_a_later_visible_exception() -> None:
 
 
 @pytest.mark.integration
-def test_browser_smoke_visits_all_views_and_captures_responsive_overview() -> None:
-    """Skipping a destination or responsive capture breaks the shell contract."""
+def test_browser_smoke_visits_and_captures_every_view_at_both_widths() -> None:
+    """Every destination needs desktop and narrow visual evidence."""
     module = _load_smoke_module()
     page = _Page(
         source_badge=[_Element("DEMO Simulated demo data")],
@@ -408,11 +474,33 @@ def test_browser_smoke_visits_all_views_and_captures_responsive_overview() -> No
     _run(module, page)
 
     assert page.clicked_views == list(NAVIGATION_LABELS)
-    assert page.viewport_widths == [DESKTOP_WIDTH, NARROW_WIDTH, DESKTOP_WIDTH]
-    assert page.screenshots == [
-        ("Overview", DESKTOP_WIDTH),
-        ("Overview", NARROW_WIDTH),
+    assert page.viewport_widths == [DESKTOP_WIDTH] + [
+        width for _label in NAVIGATION_LABELS for width in (NARROW_WIDTH, DESKTOP_WIDTH)
     ]
+    assert page.screenshots == [
+        (label, width)
+        for label in NAVIGATION_LABELS
+        for width in (DESKTOP_WIDTH, NARROW_WIDTH)
+    ]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("label", NAVIGATION_LABELS)
+@pytest.mark.parametrize("width", [DESKTOP_WIDTH, NARROW_WIDTH])
+def test_browser_smoke_rejects_horizontal_overflow_in_every_view(
+    label: str,
+    width: int,
+) -> None:
+    """Layout-heavy destinations cannot escape the page at either viewport."""
+    module = _load_smoke_module()
+    page = _Page(
+        source_badge=[_Element("DEMO Simulated demo data")],
+        admin_disabled_visible=True,
+        overflowing_layouts={(label, width)},
+    )
+
+    with pytest.raises(module.SmokeCheckError, match=f"{label}.*horizontal overflow"):
+        _run(module, page)
 
 
 @pytest.mark.integration
@@ -503,6 +591,17 @@ def test_browser_smoke_waits_for_each_selected_view_to_render() -> None:
 
     assert page.active_view == "Admin"
     assert page.pending_view is None
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("label", tuple(VIEW_CONTENT_TEXT))
+def test_browser_smoke_rejects_shell_ready_without_view_content(label: str) -> None:
+    """A destination caption cannot substitute for rendered workflow content."""
+    module = _load_smoke_module()
+    page = _Page(missing_view_content={label})
+
+    with pytest.raises(module.SmokeCheckError, match=label):
+        _run(module, page)
 
 
 @pytest.mark.integration

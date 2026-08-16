@@ -396,6 +396,7 @@ def _reset_display_filters() -> None:
     """Clear display filters without changing replay or application state."""
     for key in FILTER_WIDGET_KEYS:
         st.session_state.pop(key, None)
+        st.session_state.pop(f"{key}_value", None)
 
 
 def _reset_transaction_page() -> None:
@@ -583,7 +584,11 @@ def render_app() -> None:
         if view in FILTERED_VIEWS
         else DashboardFilters()
     )
-    requested_page = int(st.session_state.get("transaction_page", 1))
+    requested_page = (
+        1
+        if view is DashboardView.OVERVIEW
+        else int(st.session_state.get("transaction_page", 1))
+    )
     snapshot, page_number, total_pages = _load_valid_snapshot(
         filters,
         requested_page,
@@ -592,7 +597,7 @@ def render_app() -> None:
     _render_source_status(snapshot, language)
 
     if view is DashboardView.OVERVIEW:
-        render_overview(snapshot, language)
+        render_overview(snapshot, language, filters)
     elif view is DashboardView.GATEWAYS:
         render_gateways(snapshot, language)
     elif view is DashboardView.ROUTING:

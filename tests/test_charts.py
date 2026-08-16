@@ -16,6 +16,7 @@ from payment_dashboard.dashboard_repository import (
 )
 from payment_dashboard.models import DashboardSnapshot
 from payment_dashboard.ui import sections
+from payment_dashboard.ui.chart_theme import CHART_TRACE_COLORS
 from payment_dashboard.ui.charts import (
     failure_breakdown_chart,
     gateway_success_chart,
@@ -142,6 +143,44 @@ def test_snapshot_charts_accept_equivalent_streamlit_script_class(
     assert len(charts) == 4
 
 
+def test_snapshot_chart_traces_use_the_approved_palette(
+    monkeypatch: pytest.MonkeyPatch,
+    dashboard_snapshot: DashboardSnapshot,
+) -> None:
+    """Repository-backed chart paths cannot bypass shared trace colors."""
+    charts: list[go.Figure] = []
+
+    class Column:
+        def plotly_chart(self, chart: go.Figure, **_kwargs: object) -> None:
+            charts.append(chart)
+
+    monkeypatch.setattr(sections.st, "subheader", lambda *_: None)
+    monkeypatch.setattr(sections.st, "caption", lambda *_: None)
+    monkeypatch.setattr(sections.st, "columns", lambda _count: [Column(), Column()])
+    monkeypatch.setattr(
+        sections.st,
+        "plotly_chart",
+        lambda chart, **_kwargs: charts.append(chart),
+    )
+
+    render_gateway_performance(dashboard_snapshot)
+    render_success_trend(dashboard_snapshot)
+    render_failure_analysis(dashboard_snapshot)
+
+    trace_colors = {
+        color
+        for chart in charts
+        for trace in chart.data
+        for color in (
+            getattr(getattr(trace, "marker", None), "color", None),
+            getattr(getattr(trace, "line", None), "color", None),
+        )
+        if isinstance(color, str) and color.startswith("#")
+    }
+    assert trace_colors
+    assert trace_colors <= set(CHART_TRACE_COLORS)
+
+
 @pytest.mark.parametrize(
     ("builder", "title", "x_title", "y_title"),
     [
@@ -206,6 +245,17 @@ def test_chart_constructors_apply_the_shared_dark_theme(
     assert chart.layout.plot_bgcolor == "rgba(0,0,0,0)"
     assert chart.layout.font.color == "#F8FAFC"
     assert chart.layout.xaxis.gridcolor == "#24364B"
+    trace_colors = {
+        color
+        for trace in chart.data
+        for color in (
+            getattr(getattr(trace, "marker", None), "color", None),
+            getattr(getattr(trace, "line", None), "color", None),
+        )
+        if isinstance(color, str) and color.startswith("#")
+    }
+    assert trace_colors
+    assert trace_colors <= set(CHART_TRACE_COLORS)
 
 
 @pytest.mark.parametrize(

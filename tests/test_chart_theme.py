@@ -2,7 +2,28 @@
 
 from plotly import graph_objects as go
 
-from payment_dashboard.ui.chart_theme import apply_chart_theme
+from payment_dashboard.ui.chart_theme import (
+    ANALYTICAL_COLOR,
+    CHART_TRACE_COLORS,
+    CRITICAL_COLOR,
+    HEALTHY_COLOR,
+    WARNING_COLOR,
+    apply_chart_theme,
+)
+
+
+def test_chart_theme_exports_the_approved_trace_palette() -> None:
+    """Every analytical trace must draw from the command-center color tokens."""
+    assert (
+        CHART_TRACE_COLORS
+        == (
+            ANALYTICAL_COLOR,
+            HEALTHY_COLOR,
+            WARNING_COLOR,
+            CRITICAL_COLOR,
+        )
+        == ("#22D3EE", "#34D399", "#FBBF24", "#FB7185")
+    )
 
 
 def test_chart_theme_uses_transparent_dark_layout() -> None:

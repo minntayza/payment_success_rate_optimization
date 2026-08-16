@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
+from payment_dashboard.dashboard_repository import DashboardFilters
 from payment_dashboard.ui import sections, views
 
 
@@ -37,16 +38,27 @@ def test_overview_renders_operational_summary(
             name,
             lambda *args, _name=name, **kwargs: calls.append(_name),
         )
+    brief = Mock(
+        side_effect=lambda *_args, **_kwargs: calls.append("render_ai_operations_brief")
+    )
+    monkeypatch.setattr(views, "render_ai_operations_brief", brief)
     monkeypatch.setattr(views.st, "columns", lambda *_: (nullcontext(), nullcontext()))
 
-    views.render_overview(snapshot, "en")
+    filters = DashboardFilters(gateways=("Gateway B",))
+    views.render_overview(snapshot, "en", filters)
 
     assert calls == [
         "render_overview_kpis",
         "render_success_trend",
         "render_gateway_health_summary",
         "render_recent_transactions",
+        "render_ai_operations_brief",
     ]
+    brief.assert_called_once_with(
+        snapshot,
+        "en",
+        filters=filters,
+    )
 
 
 def test_overview_kpis_render_exactly_four_primary_metrics(

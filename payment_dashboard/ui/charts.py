@@ -11,9 +11,13 @@ from payment_dashboard.analytics import (
     gateway_summary,
     success_rate_series,
 )
-from payment_dashboard.config import CHART_COLORS
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
-from payment_dashboard.ui.chart_theme import apply_chart_theme
+from payment_dashboard.ui.chart_theme import (
+    ANALYTICAL_COLOR,
+    CHART_TRACE_COLORS,
+    CRITICAL_COLOR,
+    apply_chart_theme,
+)
 
 DIMENSION_KEYS = {
     "Bank Gateway": "dimensions.gateway",
@@ -36,7 +40,7 @@ def gateway_success_chart(
         x="Bank Gateway",
         y="success_rate",
         color="Bank Gateway",
-        color_discrete_sequence=CHART_COLORS,
+        color_discrete_sequence=CHART_TRACE_COLORS,
         title=translate("charts.success_rate_by_gateway", language),
         labels={
             "Bank Gateway": translate(DIMENSION_KEYS["Bank Gateway"], language),
@@ -60,7 +64,7 @@ def gateway_volume_chart(
         x="Bank Gateway",
         y="transaction_count",
         color="Bank Gateway",
-        color_discrete_sequence=CHART_COLORS,
+        color_discrete_sequence=CHART_TRACE_COLORS,
         title=translate("charts.transaction_volume_by_gateway", language),
         labels={
             "Bank Gateway": translate(DIMENSION_KEYS["Bank Gateway"], language),
@@ -83,7 +87,7 @@ def success_trend_chart(
         x="Timestamp",
         y="success_rate",
         markers=True,
-        color_discrete_sequence=["#2563EB"],
+        color_discrete_sequence=[ANALYTICAL_COLOR],
         title=translate("charts.success_trend", language),
         labels={
             "Timestamp": translate(DIMENSION_KEYS["Timestamp"], language),
@@ -116,7 +120,7 @@ def failure_breakdown_chart(
             dimension: display_dimension,
             "failed_count": translate("kpi.failed", language),
         },
-        color_discrete_sequence=["#F97316"],
+        color_discrete_sequence=[CRITICAL_COLOR],
         text_auto=True,
     )
     chart.update_layout(showlegend=False)

@@ -41,9 +41,6 @@ FAILED_STATUS = "Failed"
 # Data paths
 DEFAULT_DATA_PATH = Path("data/processed/transactions_with_gateways.csv")
 
-# Chart styling
-CHART_COLORS = ["#2563EB", "#06B6D4", "#8B5CF6", "#F59E0B"]
-
 # Schema validation
 STATUSES = frozenset({SUCCESS_STATUS, FAILED_STATUS})
 TRANSACTION_TYPES = frozenset({"Transfer", "Deposit", "Withdrawal"})

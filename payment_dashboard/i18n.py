@@ -192,6 +192,7 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "timestamps remain unchanged and separate."
         ),
         "optimization.run_source": "Run ID: {run_id}. Source: {source}.",
+        "optimization.input_digest": "Input digest: {digest}",
         "optimization.title": "Payment routing optimization",
         "optimization.summary": (
             "**Optimizer expected utility:** {utility:,.1f}  |  "
@@ -458,6 +459,7 @@ TRANSLATIONS: Final[dict[str, dict[str, str]]] = {
             "မူရင်း transaction အချိန်များကို မပြောင်းလဲပါ။"
         ),
         "optimization.run_source": "Run ID: {run_id}။ ဒေတာရင်းမြစ်: {source}။",
+        "optimization.input_digest": "ထည့်သွင်းဒေတာ digest: {digest}",
         "optimization.title": "ငွေပေးချေမှု routing အကောင်းဆုံးဖြစ်စေရေး",
         "optimization.summary": (
             "**Optimizer မျှော်မှန်း utility:** {utility:,.1f}  |  "

@@ -12,7 +12,7 @@ import streamlit as st
 from payment_dashboard.i18n import DEFAULT_LANGUAGE, Language, translate
 from payment_dashboard.routing_models import OptimizationReport
 from payment_dashboard.routing_statistics import ConfidenceInterval
-from payment_dashboard.ui.chart_theme import apply_chart_theme
+from payment_dashboard.ui.chart_theme import CHART_TRACE_COLORS, apply_chart_theme
 
 
 def _policy_labels(language: Language) -> dict[str, str]:
@@ -43,6 +43,13 @@ def render_optimization_report(
             language,
             run_id=report.run_id,
             source=report.source_label,
+        )
+    )
+    st.caption(
+        translate(
+            "optimization.input_digest",
+            language,
+            digest=report.input_digest,
         )
     )
     st.subheader(translate("optimization.title", language))
@@ -197,6 +204,7 @@ def render_optimization_report(
             ordered_decisions,
             x="timestamp",
             y=["cumulative_expected_utility", "cumulative_realized_utility"],
+            color_discrete_sequence=CHART_TRACE_COLORS,
         )
         st.plotly_chart(apply_chart_theme(cumulative_chart), width="stretch")
         st.subheader(translate("optimization.examples_title", language))
