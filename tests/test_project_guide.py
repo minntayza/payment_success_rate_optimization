@@ -1,6 +1,10 @@
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 ROOT = Path(__file__).parents[1]
 GUIDE = ROOT / "docs" / "project-function-and-data-guide.md"
 REQUIRED_HEADINGS = {
@@ -33,3 +37,28 @@ def test_project_guide_local_links_resolve() -> None:
         target for target in targets if not (GUIDE.parent / target).resolve().exists()
     ]
     assert missing == []
+
+
+def test_project_guide_keeps_routing_inputs_outside_dashboard_snapshot() -> None:
+    text = GUIDE.read_text(encoding="utf-8")
+    assert 'VALID --> LOCALCTX["Validated prepared local routing contexts"]' in text
+    assert 'MONGO --> LIVECTX["Full active MongoDB routing contexts"]' in text
+    assert "LOCALCTX --> ROUTING" in text
+    assert "LIVECTX --> ROUTING" in text
+    assert "SNAP --> ROUTING" not in text
+    assert (
+        "Snapshot aggregates feed operational analytics, alerts, and the AI brief."
+        in text
+    )
+
+
+def test_project_guide_documents_a_runnable_fresh_clone_demo() -> None:
+    text = GUIDE.read_text(encoding="utf-8")
+    assert "`PAYMENT_DEMO_MODE=1 make run`" in text
+    assert "`make prepare` before normal `make run`" in text
+
+
+def test_project_guide_contract_is_marked_integration(
+    request: pytest.FixtureRequest,
+) -> None:
+    assert request.node.get_closest_marker("integration") is not None

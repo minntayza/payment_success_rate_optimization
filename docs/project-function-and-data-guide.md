@@ -58,8 +58,10 @@ is analysis of synthetic evidence, not financial or routing advice.
 
 ## 3. Dataset lifecycle
 
-The complete lifecycle branches into a local pandas path and a live MongoDB
-path, but both paths return the same bounded `DashboardSnapshot` contract.
+The operational dashboard lifecycle branches into a local pandas path and a
+live MongoDB path, but both paths return the same bounded `DashboardSnapshot`
+contract. Routing uses validated transaction contexts from the corresponding
+backend through a separate read boundary; it does not use snapshot aggregates.
 
 ```mermaid
 flowchart TD
@@ -74,9 +76,12 @@ flowchart TD
     IMPORT --> MONGO["Live: MongoDashboardRepository"]
     PANDAS --> SNAP["Bounded DashboardSnapshot"]
     MONGO --> SNAP
-    SNAP --> ANALYTICS["Metrics, trends, failures, alerts"]
+    SNAP --> ANALYTICS["Operational metrics, trends, failures, alerts"]
     SNAP --> AI["Aggregate-only AI or local brief"]
-    SNAP --> ROUTING["routing-benchmark-v4 candidates, evaluation, artifacts"]
+    VALID --> LOCALCTX["Validated prepared local routing contexts"]
+    MONGO --> LIVECTX["Full active MongoDB routing contexts"]
+    LOCALCTX --> ROUTING["routing-benchmark-v4 candidates, evaluation, artifacts"]
+    LIVECTX --> ROUTING
     ANALYTICS --> VIEWS["Overview | Gateways | Routing Lab | Transactions | Admin"]
     AI --> VIEWS
     ROUTING --> VIEWS
@@ -110,8 +115,11 @@ In order:
    returns one deterministic transaction page plus source and lineage metadata.
    If MongoDB is unconfigured or unavailable, the app clearly labels a
    read-only demo fallback.
-7. Snapshot aggregates feed descriptive analytics, unfiltered monitoring
-   alerts, the aggregate-only AI brief, and the separate routing benchmark.
+7. Snapshot aggregates feed operational analytics, alerts, and the AI brief.
+   Routing Lab reads transaction contexts through a separate boundary: the
+   validated prepared local/demo frame for the pandas path, or the full active
+   MongoDB routing context for the live path. It does not consume
+   `DashboardSnapshot` aggregates.
 8. The five views render those governed outputs without performing analytical
    calculations themselves.
 9. In live mode only, an authenticated Admin mutation is validated and written
@@ -270,10 +278,16 @@ Atlas guide](mongodb-atlas-setup.md) only when live storage and Admin are needed
 
 ### Minimum workflows
 
-**Read-only demo:** run `make setup`, then `make run`. With no usable MongoDB
-configuration, the source badge identifies the bounded demo fallback. If you
-have the manifest-matching source file, place it at the documented raw path and
-run `make prepare` before `make run` to analyze its reproducible prepared copy.
+**Generated safe demo from a fresh clone:** run `make setup`, then
+`PAYMENT_DEMO_MODE=1 make run`. When the processed CSV is absent, this explicit
+mode generates deterministic in-memory demo transactions and does not attempt
+live MongoDB. The source badge identifies the read-only demo source.
+
+**Prepared-CSV fallback:** place the manifest-matching source file at the
+documented raw path. Run `make prepare` before normal `make run`; when live
+MongoDB is not configured or cannot be reached, the app validates and uses that
+processed CSV as its read-only local fallback. This is distinct from the
+generated fresh-clone demo above.
 
 **Live MongoDB:** complete the Atlas guide, prepare the local source, then run
 `make load-mongodb` and `make run`. Configure secrets outside Git. Generate an
