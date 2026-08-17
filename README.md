@@ -81,7 +81,9 @@ about real banks or payment gateways.
 
 ## Dashboard previews
 
-These captures come from the current public, read-only demo deployment.
+These captures document the read-only fallback layout. The live Atlas-backed
+deployment uses the same interface but displays a `LIVE` source badge and
+enables password-protected Admin controls.
 
 | Desktop command center | Responsive mobile layout |
 | --- | --- |
@@ -278,26 +280,27 @@ automatically. Stop the server with `Ctrl+C`.
 
 ## Streamlit Community Cloud deployment
 
-The current public demo is deployed from:
+The current public app is deployed from:
 
 - Repository: `minntayza/payment_success_rate_optimization`
 - Branch: `main`
 - Entry point: `streamlit_app.py`
 - Python: 3.12
-- Streamlit secret: `PAYMENT_DEMO_MODE = "1"`
+- Data source: MongoDB Atlas, configured through encrypted Streamlit secrets
 
 Deploy your own copy from [Streamlit Community
 Cloud](https://share.streamlit.io/) by selecting those GitHub coordinates and
-adding the demo-mode secret in **Advanced settings**. The root entry point
-imports `payment_dashboard.app` while keeping the repository root as the
-working directory. Do not commit `.streamlit/secrets.toml`, MongoDB connection
-strings, administrator hashes, or AI-provider keys.
+adding either Atlas settings or `PAYMENT_DEMO_MODE = "1"` in **Advanced
+settings**. The root entry point imports `payment_dashboard.app` while keeping
+the repository root as the working directory. Do not commit
+`.streamlit/secrets.toml`, MongoDB connection strings, administrator hashes, or
+AI-provider keys.
 
-The hosted demo is intentionally read-only. To deploy live MongoDB-backed
-analytics and Admin mutations, add `MONGODB_URI`, `MONGODB_DATABASE`, and
-`ADMIN_PASSWORD_HASH` through Streamlit's encrypted secrets interface and omit
-`PAYMENT_DEMO_MODE`. Follow the [MongoDB Atlas setup
-guide](docs/mongodb-atlas-setup.md) before enabling that mode.
+For live MongoDB-backed analytics and Admin mutations, add `MONGODB_URI`,
+`MONGODB_DATABASE`, and `ADMIN_PASSWORD_HASH` through Streamlit's encrypted
+secrets interface and omit `PAYMENT_DEMO_MODE`. For a public read-only demo,
+configure only `PAYMENT_DEMO_MODE = "1"`. Follow the [MongoDB Atlas setup
+guide](docs/mongodb-atlas-setup.md) before enabling live mode.
 
 ## Use the dashboard
 
