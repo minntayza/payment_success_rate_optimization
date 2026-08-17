@@ -58,17 +58,16 @@ def test_project_guide_documents_a_runnable_fresh_clone_demo() -> None:
     assert "`PAYMENT_DEMO_MODE=1 make run`" in text
     assert "`make prepare` before normal `make run`" in text
     assert (
-        "`PAYMENT_DEMO_MODE=1` supplies generated fallback data only when "
-        "MongoDB is not configured."
+        "`PAYMENT_DEMO_MODE` controls generation of fallback data, not backend "
+        "selection."
     ) in normalized
+    assert "A successful configured MongoDB connection takes precedence." in normalized
     assert (
-        "If MongoDB environment or local `.env` settings exist, the app prefers "
-        "live MongoDB."
+        "Generated fallback may be used when MongoDB is absent or after a "
+        "categorized MongoDB connection failure, when no prepared CSV is available."
     ) in normalized
-    assert (
-        "remove or unset MongoDB configuration from both the environment and "
-        "local `.env`"
-    ) in normalized
+    assert "process environment, `.streamlit/secrets.toml`, and `.env`" in normalized
+    assert "only when MongoDB is not configured" not in text
     assert "does not attempt live MongoDB" not in text
 
 
