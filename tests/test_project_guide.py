@@ -20,6 +20,21 @@ REQUIRED_HEADINGS = {
 }
 
 
+def _invalid_local_targets(text: str) -> list[str]:
+    targets = re.findall(r"\[[^]]+\]\((?!https?://|#)([^)]+)\)", text)
+    invalid = []
+    for target in targets:
+        path = Path(target)
+        resolved = (GUIDE.parent / path).resolve()
+        if (
+            path.is_absolute()
+            or not resolved.is_relative_to(ROOT.resolve())
+            or not resolved.exists()
+        ):
+            invalid.append(target)
+    return invalid
+
+
 def test_project_guide_has_required_structure() -> None:
     text = GUIDE.read_text(encoding="utf-8")
     assert set(text.splitlines()) >= REQUIRED_HEADINGS
@@ -33,10 +48,13 @@ def test_project_guide_local_links_resolve() -> None:
     text = GUIDE.read_text(encoding="utf-8")
     targets = re.findall(r"\[[^]]+\]\((?!https?://|#)([^)]+)\)", text)
     assert targets
-    missing = [
-        target for target in targets if not (GUIDE.parent / target).resolve().exists()
-    ]
-    assert missing == []
+    assert _invalid_local_targets(text) == []
+
+
+def test_project_guide_link_contract_rejects_absolute_and_escaping_targets() -> None:
+    absolute = str(ROOT / "README.md")
+    unsafe_text = f"[absolute]({absolute}) and [escape](../..)"
+    assert _invalid_local_targets(unsafe_text) == [absolute, "../.."]
 
 
 def test_project_guide_keeps_routing_inputs_outside_dashboard_snapshot() -> None:
@@ -46,9 +64,45 @@ def test_project_guide_keeps_routing_inputs_outside_dashboard_snapshot() -> None
     assert "LOCALCTX --> ROUTING" in text
     assert "LIVECTX --> ROUTING" in text
     assert "SNAP --> ROUTING" not in text
+    assert "SNAP --> ANALYTICS" not in text
+    assert "PANDAS --> PRESULT" in text
+    assert "MONGO --> MRESULT" in text
+    assert "PRESULT --> SNAP" in text
+    assert "MRESULT --> SNAP" in text
     assert (
-        "Snapshot aggregates feed operational analytics, alerts, and the AI brief."
-        in text
+        "Each repository computes metrics, trends, failure summary, alerts, and "
+        "transaction page data before assembling `DashboardSnapshot` as the "
+        "presentation contract."
+    ) in " ".join(text.split())
+
+
+def test_project_guide_describes_checksum_consistency_without_security_claims() -> None:
+    text = GUIDE.read_text(encoding="utf-8")
+    normalized = " ".join(text.split())
+    assert "checksum consistency verification" in normalized
+    assert (
+        "Changing both an artifact and its unsigned mutable manifest can pass "
+        "this check."
+    ) in normalized
+    assert "authenticated integrity or nonrepudiation" in normalized
+    assert "rejects tampering" not in text
+
+
+def test_project_guide_distinguishes_repository_pagination() -> None:
+    text = GUIDE.read_text(encoding="utf-8")
+    normalized = " ".join(text.split())
+    assert "server-paginated" not in text
+    assert "pandas slices a sorted in-memory frame" in normalized
+    assert "MongoDB performs server-side pagination" in normalized
+
+
+def test_project_guide_documents_destructive_clean_target() -> None:
+    text = GUIDE.read_text(encoding="utf-8")
+    normalized = " ".join(text.split())
+    assert "`make clean`" in text
+    assert (
+        "Destructive local cleanup that removes `.venv` and development caches."
+        in normalized
     )
 
 

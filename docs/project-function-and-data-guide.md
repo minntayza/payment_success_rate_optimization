@@ -38,7 +38,7 @@ a read-only demo fallback and shows its simulation version.
 | **Overview** | “What is happening now?” | Four KPIs, the success-rate trend, compact gateway health, recent transactions, and an optional AI Operations Brief. |
 | **Gateways** | “Which synthetic gateways or failure patterns deserve attention?” | Gateway volume, success and latency comparisons; failures by latency band; and full alert evidence including counts, periods, confidence interval, and status. |
 | **Routing Lab** | “How do routing policies compare inside the simulator?” | Assumptions, run ID and input digest, selected objective weights, policy results, constraints, utilization, uncertainty, and sensitivity evidence. |
-| **Transactions** | “Which records make up the selected result?” | A newest-first, server-paginated table and its interpretation guide. Previous/Next move through bounded pages. |
+| **Transactions** | “Which records make up the selected result?” | A newest-first, paginated table and its interpretation guide. Previous/Next move through bounded pages. |
 | **Admin** | “Can an authorized operator manage the live simulated dataset?” | Shared-demo authentication plus validated create, edit, and soft-delete controls. Demo mode is read-only. |
 
 Overview, Gateways, and Transactions share filters for gateway, transaction
@@ -48,6 +48,10 @@ full active history so a display filter cannot manufacture a degradation.
 Routing Lab likewise ignores display filters and pagination because it needs a
 complete fixed context. Admin is isolated from analytical filters and KPI
 cards.
+
+Pagination implementation differs by backend: pandas slices a sorted in-memory
+frame, while MongoDB performs server-side pagination. Both return the same
+bounded page fields to the presentation layer.
 
 The AI brief is generated only when requested. It receives aggregate snapshot
 facts—counts, rates, gateway aggregates, active-alert names, a top failure band,
@@ -74,15 +78,16 @@ flowchart TD
     CSV --> PANDAS["Demo: PandasDashboardRepository"]
     CSV --> IMPORT["Live import: normalize, index, upsert, audit"]
     IMPORT --> MONGO["Live: MongoDashboardRepository"]
-    PANDAS --> SNAP["Bounded DashboardSnapshot"]
-    MONGO --> SNAP
-    SNAP --> ANALYTICS["Operational metrics, trends, failures, alerts"]
+    PANDAS --> PRESULT["Compute metrics, trends, failure summary, alerts, sorted page"]
+    MONGO --> MRESULT["Aggregate metrics, trends, failure summary, alerts, server page"]
+    PRESULT --> SNAP["Assemble bounded DashboardSnapshot"]
+    MRESULT --> SNAP
     SNAP --> AI["Aggregate-only AI or local brief"]
     VALID --> LOCALCTX["Validated prepared local routing contexts"]
     MONGO --> LIVECTX["Full active MongoDB routing contexts"]
     LOCALCTX --> ROUTING["routing-benchmark-v4 candidates, evaluation, artifacts"]
     LIVECTX --> ROUTING
-    ANALYTICS --> VIEWS["Overview | Gateways | Routing Lab | Transactions | Admin"]
+    SNAP --> VIEWS["Overview | Gateways | Routing Lab | Transactions | Admin"]
     AI --> VIEWS
     ROUTING --> VIEWS
     VIEWS --> AUTH["Authenticated Admin mutations"]
@@ -111,15 +116,17 @@ In order:
    [`load_mongodb.py`](../payment_dashboard/load_mongodb.py) to normalize and
    synchronize it into MongoDB, create indexes, preserve soft deletions, and
    audit inserts and updates.
-6. The selected repository applies display filters, produces aggregates, and
-   returns one deterministic transaction page plus source and lineage metadata.
-   If MongoDB is unconfigured or unavailable, the app clearly labels a
-   read-only demo fallback.
-7. Snapshot aggregates feed operational analytics, alerts, and the AI brief.
-   Routing Lab reads transaction contexts through a separate boundary: the
-   validated prepared local/demo frame for the pandas path, or the full active
-   MongoDB routing context for the live path. It does not consume
-   `DashboardSnapshot` aggregates.
+6. Each repository computes metrics, trends, failure summary, alerts, and
+   transaction page data before assembling `DashboardSnapshot` as the
+   presentation contract. Pandas applies the analytical functions to a sorted
+   in-memory frame; MongoDB runs equivalent aggregate and page queries. If
+   MongoDB is unconfigured or unavailable, the app clearly labels a read-only
+   demo fallback.
+7. The assembled snapshot feeds the five-view presentation and aggregate-only
+   AI brief. Routing Lab reads transaction contexts through a separate
+   boundary: the validated prepared local/demo frame for the pandas path, or
+   the full active MongoDB routing context for the live path. It does not
+   consume `DashboardSnapshot` aggregates.
 8. The five views render those governed outputs without performing analytical
    calculations themselves.
 9. In live mode only, an authenticated Admin mutation is validated and written
@@ -171,10 +178,14 @@ source tree.
   update, or soft-delete and its audit event run in one database transaction
   when sessions are available; failures are translated without leaking
   provider details.
-- **Routing artifact integrity:** [`routing_run_store.py`](../payment_dashboard/routing_run_store.py)
+- **Routing artifact checksum consistency:** [`routing_run_store.py`](../payment_dashboard/routing_run_store.py)
   writes minimized contexts, candidates, held outcomes, report, configuration,
-  and per-artifact digests under a content-derived run ID. Loading rechecks
-  every digest and rejects tampering.
+  and per-artifact digests under a content-derived run ID. Loading recomputes
+  the digests and compares them with the unsigned mutable manifest. This
+  checksum consistency verification detects artifact/manifest inconsistency or
+  accidental corruption. Changing both an artifact and its unsigned mutable
+  manifest can pass this check. It does not provide authenticated integrity or
+  nonrepudiation.
 
 ## 5. Functional architecture
 
@@ -323,6 +334,7 @@ opt-ins rather than part of the default test suite.
 | `make typecheck` | Run strict mypy on `payment_dashboard`. |
 | `make check` | Run lint, typecheck, and the full offline tests. |
 | `make verify-clean` | Export a clean Git checkout and verify installation and launch there. |
+| `make clean` | Destructive local cleanup that removes `.venv` and development caches. |
 
 Run `make help` to display these targets. For interpretation questions, use the
 [customer support guide](customer-support-guide.md); for detailed data caveats
