@@ -279,9 +279,13 @@ Atlas guide](mongodb-atlas-setup.md) only when live storage and Admin are needed
 ### Minimum workflows
 
 **Generated safe demo from a fresh clone:** run `make setup`, then
-`PAYMENT_DEMO_MODE=1 make run`. When the processed CSV is absent, this explicit
-mode generates deterministic in-memory demo transactions and does not attempt
-live MongoDB. The source badge identifies the read-only demo source.
+`PAYMENT_DEMO_MODE=1 make run`. `PAYMENT_DEMO_MODE=1` supplies generated
+fallback data only when MongoDB is not configured. With no MongoDB
+configuration and no processed CSV, it generates deterministic in-memory demo
+transactions. If MongoDB environment or local `.env` settings exist, the app
+prefers live MongoDB. For a guaranteed demo-only run, remove or unset MongoDB
+configuration from both the environment and local `.env` before starting the
+app. The source badge identifies the data source actually selected.
 
 **Prepared-CSV fallback:** place the manifest-matching source file at the
 documented raw path. Run `make prepare` before normal `make run`; when live

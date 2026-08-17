@@ -54,8 +54,22 @@ def test_project_guide_keeps_routing_inputs_outside_dashboard_snapshot() -> None
 
 def test_project_guide_documents_a_runnable_fresh_clone_demo() -> None:
     text = GUIDE.read_text(encoding="utf-8")
+    normalized = " ".join(text.split())
     assert "`PAYMENT_DEMO_MODE=1 make run`" in text
     assert "`make prepare` before normal `make run`" in text
+    assert (
+        "`PAYMENT_DEMO_MODE=1` supplies generated fallback data only when "
+        "MongoDB is not configured."
+    ) in normalized
+    assert (
+        "If MongoDB environment or local `.env` settings exist, the app prefers "
+        "live MongoDB."
+    ) in normalized
+    assert (
+        "remove or unset MongoDB configuration from both the environment and "
+        "local `.env`"
+    ) in normalized
+    assert "does not attempt live MongoDB" not in text
 
 
 def test_project_guide_contract_is_marked_integration(
