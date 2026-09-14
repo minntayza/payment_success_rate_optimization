@@ -14,12 +14,28 @@ make web-api
 cd web && npm install && npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). In offline demo mode use
-`demo@payments.local` / `demo-user`, or use
-`admin@payments.local` / `demo-admin` for the administrator view. These
-credentials only work when MongoDB is not configured. For any live deployment,
-set every `WEB_*` value in `.env.example`, use a strong `WEB_AUTH_SECRET`, and
-serve the API and frontend over HTTPS.
+Open [http://localhost:3000](http://localhost:3000). The browser app has two
+experiences:
+
+- **Customer portal** — account balances, recent activity, saved beneficiaries,
+  and simulated transfers for the signed-in MongoDB customer.
+- **Administrator workspace** — overview, transaction ledger with update and
+  delete controls, gateway analytics, routing guidance, and audit history.
+
+For a fresh local Atlas demo, seed the database in separate terminal sessions:
+
+```bash
+make seed-customers      # 100,000 synthetic MongoDB customer records
+make seed-transactions   # 100,000 additional synthetic transactions
+```
+
+The customer portal authenticates against `customer_users` in MongoDB, then
+loads that same customer's profile and accounts. After seeding, use
+`customer000100@demo.bank` with the configured demo customer password
+(`demo-user` by default) to test the portal. This is a synthetic test account,
+not a real person. Use `admin@payments.local` / `demo-admin` for the local
+administrator view. Replace all demo credentials and `WEB_AUTH_SECRET` before
+any deployment, and serve the API and frontend over HTTPS.
 
 Regular users receive privacy-filtered transaction records. Administrators can
 call the protected transaction mutation routes; mutations retain the existing
