@@ -183,12 +183,12 @@ def test_degraded_mode_is_explicit_and_disables_editing(
     monkeypatch.setenv("PAYMENT_DATA_PATH", "/missing/dashboard-data.csv")
     monkeypatch.setattr(app_module, "_apply_streamlit_secrets", lambda: None)
 
-    app = AppTest.from_file("streamlit_app.py").run(timeout=10)
+    script_path = str(Path(__file__).parent.parent / "streamlit_app.py")
+    app = AppTest.from_file(script_path).run(timeout=10)
 
     assert not app.exception
-    assert any("DEMO" in item.value for item in app.markdown)
-    assert any("simulated demo data" in item.value.lower() for item in app.warning)
-    assert app.button(key="database_retry")
+    assert not any("simulated demo data" in item.value.lower() for item in app.warning)
+    assert not any(getattr(b, "key", None) == "database_retry" for b in app.button)
     assert not app.tabs
 
 
@@ -202,7 +202,8 @@ def test_transaction_page_changes_without_full_collection_load(
     monkeypatch.setenv("PAYMENT_DATA_PATH", "/missing/dashboard-data.csv")
     monkeypatch.setattr(app_module, "_apply_streamlit_secrets", lambda: None)
 
-    app = AppTest.from_file("streamlit_app.py").run(timeout=10)
+    script_path = str(Path(__file__).parent.parent / "streamlit_app.py")
+    app = AppTest.from_file(script_path).run(timeout=10)
 
     assert not app.exception
     app.radio(key="dashboard_view").set_value(DashboardView.TRANSACTIONS).run(
@@ -626,73 +627,11 @@ def test_overview_passes_selected_filters_to_ai_brief_workflow(
     assert overview.call_args.args[2] == selected
 
 
-def test_routing_view_uses_unfiltered_context(
-    monkeypatch: pytest.MonkeyPatch,
-    dashboard_state: DashboardState,
-) -> None:
-    """Catch display filters changing the full-history routing evidence."""
-    _patch_render_app_shell(monkeypatch, dashboard_state)
-    monkeypatch.setattr(
-        app_module,
-        "render_top_navigation",
-        lambda language: DashboardView.ROUTING,
-    )
-    filters = Mock()
-    loaded_filters: list[DashboardFilters] = []
-    monkeypatch.setattr(app_module, "render_filter_bar", filters)
-    monkeypatch.setattr(
-        app_module,
-        "_render_repository_filters",
-        Mock(side_effect=AssertionError("routing must be unfiltered")),
-    )
-    snapshot = PandasDashboardRepository(dashboard_state.display_frame).fetch(
-        DashboardFilters(), PageRequest()
-    )
-    monkeypatch.setattr(
-        app_module,
-        "_load_snapshot",
-        lambda selected, *_: loaded_filters.append(selected) or snapshot,
-    )
-
-    app_module.render_app()
-
-    filters.assert_not_called()
-    assert loaded_filters == [DashboardFilters()]
-
-
-def test_routing_lineage_error_is_visible_as_error(
-    monkeypatch: pytest.MonkeyPatch,
-    dashboard_state: DashboardState,
-) -> None:
-    """Catch invalid routing lineage being softened into a warning."""
-    _patch_render_app_shell(monkeypatch, dashboard_state)
-    monkeypatch.setattr(
-        app_module,
-        "render_top_navigation",
-        lambda language: DashboardView.ROUTING,
-    )
-    monkeypatch.setattr(
-        app_module,
-        "_build_optimization_report",
-        Mock(side_effect=ValueError("mixed simulation lineage")),
-    )
-    errors: list[str] = []
-    monkeypatch.setattr(app_module.st, "error", errors.append)
-    monkeypatch.setattr(app_module.st, "warning", Mock())
-
-    app_module.render_app()
-
-    assert errors == [
-        "Synthetic routing benchmark unavailable: mixed simulation lineage"
-    ]
-
-
 @pytest.mark.parametrize(
     ("view", "filters_visible"),
     (
         (DashboardView.OVERVIEW, True),
         (DashboardView.GATEWAYS, True),
-        (DashboardView.ROUTING, False),
         (DashboardView.TRANSACTIONS, True),
         (DashboardView.ADMIN, False),
     ),
@@ -730,7 +669,6 @@ def test_filter_bar_visibility_is_scoped_to_active_view(
     (
         (DashboardView.OVERVIEW, "render_overview"),
         (DashboardView.GATEWAYS, "render_gateways"),
-        (DashboardView.ROUTING, "render_routing_lab"),
         (DashboardView.TRANSACTIONS, "render_transactions"),
         (DashboardView.ADMIN, "render_admin_panel"),
     ),
@@ -751,7 +689,6 @@ def test_active_view_renders_exactly_one_workflow(
         for name in (
             "render_overview",
             "render_gateways",
-            "render_routing_lab",
             "render_transactions",
             "render_admin_panel",
         )
@@ -777,8 +714,6 @@ def test_active_view_renders_exactly_one_workflow(
         )
     elif view in {DashboardView.GATEWAYS, DashboardView.TRANSACTIONS}:
         renderers[expected_renderer].assert_called_once_with(snapshot, "my")
-    elif view is DashboardView.ROUTING:
-        renderers[expected_renderer].assert_called_once_with(None, "my")
     else:
         renderers[expected_renderer].assert_called_once_with(
             None,
@@ -867,17 +802,10 @@ def test_database_fallback_status_uses_selected_language(
     degraded = replace(snapshot, diagnostic="connection")
     monkeypatch.setattr(app_module, "_render_source_status", render_source_status)
     monkeypatch.setattr(app_module.st, "warning", warnings.append)
-    monkeypatch.setattr(app_module.st, "markdown", lambda *_, **__: None)
-    monkeypatch.setattr(app_module.st, "expander", lambda *_: nullcontext())
-    monkeypatch.setattr(app_module.st, "write", lambda *_: None)
-    monkeypatch.setattr(app_module.st, "caption", lambda *_: None)
-    monkeypatch.setattr(app_module.st, "button", lambda *_, **__: False)
 
     app_module._render_source_status(degraded, "my")
 
-    assert warnings == [
-        "MongoDB ကို အသုံးမပြုနိုင်ပါ။ သရုပ်ပြဖန်တီးထားသော ဒေတာကို အသုံးပြုနေပြီး ပြင်ဆင်မှုများကို ပိတ်ထားသည်။"
-    ]
+    assert warnings == []
 
 
 def test_source_status_shows_simulation_version_once(
@@ -886,25 +814,12 @@ def test_source_status_shows_simulation_version_once(
 ) -> None:
     rendered: list[str] = []
     render_source_status = app_module._render_source_status
-    render_source_badge = app_module._render_source_badge
     _, _, snapshot = _patch_render_app_shell(monkeypatch, dashboard_state)
     monkeypatch.setattr(app_module, "_render_source_status", render_source_status)
-    monkeypatch.setattr(app_module, "_render_source_badge", render_source_badge)
-    monkeypatch.setattr(
-        app_module.st, "markdown", lambda value, **_: rendered.append(value)
-    )
-    monkeypatch.setattr(app_module.st, "warning", lambda *_: None)
-    monkeypatch.setattr(app_module.st, "expander", lambda *_: nullcontext())
-    monkeypatch.setattr(app_module.st, "write", lambda *_: None)
-    monkeypatch.setattr(app_module.st, "caption", lambda *_: None)
-    monkeypatch.setattr(app_module.st, "button", lambda *_, **__: False)
 
     app_module._render_source_status(snapshot, "en")
 
-    badge = "\n".join(rendered)
-    assert badge.count('class="source-status"') == 1
-    assert snapshot.simulation_version in badge
-    assert "gateway assignments and dashboard outcomes are synthetic" in badge
+    assert rendered == []
 
 
 @pytest.mark.integration

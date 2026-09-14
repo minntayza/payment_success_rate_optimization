@@ -23,7 +23,7 @@ def test_runtime_modules_consume_authoritative_config_constants() -> None:
 def test_environment_example_documents_mongodb_keys() -> None:
     example = Path(".env.example").read_text()
     assert "MONGODB_URI=mongodb+srv://" in example
-    assert "MONGODB_DATABASE=payment_success_demo" in example
+    assert "MONGODB_DATABASE=payment" in example
     assert "ADMIN_PASSWORD_HASH=pbkdf2_sha256$" in example
     assert "SUPABASE_" not in example
 

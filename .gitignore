@@ -1,6 +1,8 @@
 .worktrees/
 .DS_Store
 .venv/
+web/node_modules/
+web/.next/
 .env
 __pycache__/
 .pytest_cache/

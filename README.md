@@ -1,5 +1,31 @@
 # Payment Success Rate Optimization
 
+## Modern web application
+
+The repository now includes a role-based web application alongside the
+Streamlit dashboard during migration. The Python domain modules remain the
+single source of truth for analytics, validation, routing, and MongoDB writes.
+
+Start the backend and frontend in separate terminals:
+
+```bash
+make setup
+make web-api
+cd web && npm install && npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). In offline demo mode use
+`demo@payments.local` / `demo-user`, or use
+`admin@payments.local` / `demo-admin` for the administrator view. These
+credentials only work when MongoDB is not configured. For any live deployment,
+set every `WEB_*` value in `.env.example`, use a strong `WEB_AUTH_SECRET`, and
+serve the API and frontend over HTTPS.
+
+Regular users receive privacy-filtered transaction records. Administrators can
+call the protected transaction mutation routes; mutations retain the existing
+MongoDB audit log. This academic dataset has no organization identifier yet, so
+external customer tenancy must be added before giving separate companies access.
+
 [**Open the live Streamlit dashboard**](https://paymentsuccessrateoptimization-3avx7cbdvcbbzpg9xvqv2x.streamlit.app/)
 
 A data analysis and management project for exploring simulated payment

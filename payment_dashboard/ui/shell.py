@@ -17,9 +17,9 @@ class DashboardView(StrEnum):
 
     OVERVIEW = "overview"
     GATEWAYS = "gateways"
-    ROUTING = "routing"
     TRANSACTIONS = "transactions"
     ADMIN = "admin"
+
 
 
 FILTERED_VIEWS = frozenset(

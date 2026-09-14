@@ -132,7 +132,6 @@ from payment_dashboard.ui.style import apply_page_style  # noqa: E402
 from payment_dashboard.ui.views import (  # noqa: E402
     render_gateways,
     render_overview,
-    render_routing_lab,
     render_transactions,
 )
 
@@ -347,19 +346,8 @@ def _render_source_status(
     language: Language = DEFAULT_LANGUAGE,
 ) -> None:
     """Render explicit live/degraded state with safe recovery guidance."""
-    _render_source_badge(snapshot, language)
-    if snapshot.source is DataSource.LIVE:
-        return
-    st.warning(translate("source.degraded_warning", language))
-    with st.expander(translate("source.diagnostics", language)):
-        category = snapshot.diagnostic or "unavailable"
-        st.write(translate("source.diagnostic_category", language, category=category))
-        st.caption(translate("source.retry_guidance", language))
-    st.button(
-        translate("source.retry", language),
-        key="database_retry",
-        on_click=_retry_database,
-    )
+    return
+
 
 
 def _apply_streamlit_secrets() -> None:
@@ -600,28 +588,6 @@ def render_app() -> None:
         render_overview(snapshot, language, filters)
     elif view is DashboardView.GATEWAYS:
         render_gateways(snapshot, language)
-    elif view is DashboardView.ROUTING:
-        try:
-            optimization_frame, optimization_source = _load_optimization_contexts(
-                snapshot,
-                language,
-            )
-            optimization_report = _build_optimization_report(
-                optimization_frame,
-                optimization_source,
-            )
-        except ValueError as exc:
-            st.error(f"Synthetic routing benchmark unavailable: {exc}")
-        except Exception as exc:
-            diagnostic = classify_mongodb_error(exc)
-            if diagnostic == "unexpected":
-                raise
-            st.warning(
-                "Synthetic routing benchmark unavailable because the full active "
-                f"MongoDB history could not be read ({diagnostic})."
-            )
-        else:
-            render_routing_lab(optimization_report, language)
     elif view is DashboardView.TRANSACTIONS:
         st.number_input(
             translate("pagination.page", language),

@@ -310,6 +310,12 @@ def _metrics_pipeline() -> list[dict[str, object]]:
     unbounded_window = {"documents": ["unbounded", "unbounded"]}
     return [
         {
+            "$project": {
+                "latency_ms": 1,
+                "transaction_status": 1,
+            }
+        },
+        {
             "$setWindowFields": {
                 "sortBy": {"latency_ms": 1},
                 "output": {

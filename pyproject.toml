@@ -15,6 +15,8 @@ dependencies = [
     "streamlit>=1.40,<2",
     "pymongo>=4.10,<5",
     "scipy>=1.14,<2",
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +33,9 @@ dev = [
 [project.scripts]
 payment-prepare = "payment_dashboard.prepare_data:main"
 payment-load-mongodb = "payment_dashboard.load_mongodb:main"
+payment-web-api = "payment_dashboard.api:run"
+payment-seed-customers = "payment_dashboard.seed_customers:main"
+payment-seed-transactions = "payment_dashboard.seed_transactions:main"
 
 [tool.setuptools.packages.find]
 include = ["payment_dashboard*"]

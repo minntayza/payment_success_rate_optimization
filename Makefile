@@ -2,7 +2,7 @@ PYTHON = .venv/bin/python
 PYTEST = $(PYTHON) -m pytest
 RUFF = .venv/bin/ruff
 
-.PHONY: help setup test test-unit test-integration test-live smoke lint format typecheck check run prepare load-mongodb verify-clean clean
+.PHONY: help setup test test-unit test-integration test-live smoke lint format typecheck check run web-api web-dev seed-customers seed-transactions prepare load-mongodb verify-clean clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -39,6 +39,18 @@ check: lint typecheck test  ## Run all offline quality gates
 
 run:  ## Start the Streamlit dashboard
 	$(PYTHON) -m streamlit run payment_dashboard/app.py
+
+web-api:  ## Start the FastAPI web backend
+	$(PYTHON) -m uvicorn payment_dashboard.api:app --reload --port 8000
+
+web-dev:  ## Start the Next.js web frontend (run web-api separately)
+	cd web && npm run dev
+
+seed-customers:  ## Seed 100,000 synthetic customer records in MongoDB
+	$(PYTHON) -m payment_dashboard.seed_customers
+
+seed-transactions:  ## Add 100,000 synthetic transactions to MongoDB
+	$(PYTHON) -m payment_dashboard.seed_transactions
 
 prepare:  ## Prepare data (requires raw CSV in data/raw/)
 	$(PYTHON) -m payment_dashboard.prepare_data \
