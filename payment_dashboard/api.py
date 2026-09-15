@@ -16,7 +16,6 @@ import secrets
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated, Any, Literal
-from uuid import uuid4
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -25,6 +24,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from payment_dashboard.customer_payments import (
+    DEMO_CUSTOMER,
+    apply_balance,
+    decide_outcome,
+    demo_cards,
+    ledger_values,
+    next_reference,
+    payment_activity,
+    public_accounts,
+)
 from payment_dashboard.dashboard_repository import (
     DashboardFilters,
     PageRequest,
@@ -83,9 +92,10 @@ class DemoAuditEvent(BaseModel):
 
 class CustomerTransfer(BaseModel):
     recipient: str = Field(min_length=2, max_length=80)
-    account_number: str = Field(min_length=4, max_length=32)
+    account_number: str = Field(default="88241903", min_length=4, max_length=32)
     amount: float = Field(gt=0, le=10_000)
     note: str = Field(default="", max_length=120)
+    gateway: Literal["Gateway A", "Gateway B", "Gateway C", "Gateway D"] = "Gateway A"
 
 
 def _secret() -> bytes:
@@ -172,33 +182,37 @@ def _demo_repository() -> PandasDashboardRepository:
 
 
 DEMO_AUDIT_EVENTS: list[DemoAuditEvent] = []
-DEMO_CUSTOMER_BALANCE = 12_580.40
-DEMO_CUSTOMER_ACTIVITY: list[dict[str, object]] = [
-    {
-        "id": "txn-1001",
-        "name": "Fresh Mart",
-        "category": "Card payment",
-        "amount": -42.50,
-        "date": "Today",
-        "icon": "🛒",
-    },
-    {
-        "id": "txn-1002",
-        "name": "Monthly salary",
-        "category": "Income",
-        "amount": 2_450.00,
-        "date": "Yesterday",
-        "icon": "↓",
-    },
-    {
-        "id": "txn-1003",
-        "name": "Electricity bill",
-        "category": "Bills",
-        "amount": -31.80,
-        "date": "12 Sep",
-        "icon": "⚡",
-    },
-]
+
+
+def _public_activity(rows: list[dict[str, Any]]) -> list[dict[str, object]]:
+    """Drop Mongo-only fields so the portal can JSON-encode activity."""
+    cleaned: list[dict[str, object]] = []
+    for item in rows:
+        row = {
+            key: value
+            for key, value in item.items()
+            if key not in {"_id", "customer_id", "created_at"}
+        }
+        cleaned.append(row)
+    return cleaned
+
+
+def _portal_payload(
+    customer_name: str,
+    accounts: list[dict[str, Any]],
+    beneficiaries: list[dict[str, Any]],
+    activity: list[dict[str, Any]],
+    notifications: int,
+) -> dict[str, object]:
+    safe_accounts = public_accounts(accounts)
+    return {
+        "customer_name": customer_name,
+        "accounts": safe_accounts,
+        "cards": demo_cards(customer_name, safe_accounts),
+        "beneficiaries": beneficiaries,
+        "activity": _public_activity(activity)[:8],
+        "notifications": notifications,
+    }
 
 
 def _demo_audit(
@@ -307,33 +321,15 @@ def me(
 def customer_overview(
     principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
 ) -> dict[str, object]:
-    """Return signed-in customer profile from MongoDB."""
-    seed = {
-        "customer_name": "Mia Aung",
-        "accounts": [
-            {
-                "name": "Everyday account",
-                "number": "•••• 4821",
-                "balance": DEMO_CUSTOMER_BALANCE,
-                "currency": "USD",
-            },
-            {
-                "name": "Savings goal",
-                "number": "•••• 1184",
-                "balance": 5_200.00,
-                "currency": "USD",
-            },
-        ],
-        "beneficiaries": [
-            {"name": "Alex Morgan", "initials": "AM", "account_number": "•••• 8852"},
-            {"name": "Noah Williams", "initials": "NW", "account_number": "•••• 1239"},
-            {"name": "Aye Chan", "initials": "AC", "account_number": "•••• 4301"},
-        ],
-        "activity": DEMO_CUSTOMER_ACTIVITY[:8],
-        "notifications": 2,
-    }
+    """Return signed-in customer profile, cards, and recent activity."""
     if not os.getenv("MONGODB_URI"):
-        return seed
+        return _portal_payload(
+            str(DEMO_CUSTOMER["customer_name"]),
+            list(DEMO_CUSTOMER["accounts"]),
+            list(DEMO_CUSTOMER["beneficiaries"]),
+            list(DEMO_CUSTOMER["activity"]),
+            int(DEMO_CUSTOMER["notifications"]),
+        )
     database = _live_database()
     customer = database["customer_users"].find_one({"email": principal.subject})
     if customer is None:
@@ -354,19 +350,35 @@ def customer_overview(
                 "customer_id": customer["_id"],
                 "created_at": datetime.now(UTC),
             }
-            for item in seed["activity"]
+            for item in DEMO_CUSTOMER["activity"]
         ]
         database["customer_activity"].insert_many(activity)
-        for item in activity:
-            item.pop("customer_id", None)
-            item.pop("created_at", None)
-    return {
-        "customer_name": customer["customer_name"],
-        "accounts": customer["accounts"],
-        "beneficiaries": customer["beneficiaries"],
-        "activity": activity,
-        "notifications": customer["notifications"],
-    }
+    return _portal_payload(
+        str(customer["customer_name"]),
+        list(customer["accounts"]),
+        list(customer["beneficiaries"]),
+        activity,
+        int(customer.get("notifications", 0)),
+    )
+
+
+def _record_ledger_payment(
+    principal: AuthenticatedPrincipal,
+    values: dict[str, object],
+    database: Any | None,
+) -> None:
+    """Best-effort write so Admin can see the customer payment."""
+    if database is None:
+        payload = _demo_payload(values)
+        frame = _demo_frame()
+        if str(payload["Transaction ID"]) not in set(frame["Transaction ID"]):
+            _demo_repository().frame.loc[len(frame)] = payload
+            _demo_audit("CUSTOMER_TRANSFER", str(payload["Transaction ID"]), principal)
+        return
+    try:
+        create_transaction(database, values, principal)
+    except (TransactionMutationError, TransactionValidationError):
+        return
 
 
 @app.post("/api/customer/transfers", status_code=status.HTTP_201_CREATED)
@@ -374,8 +386,18 @@ def customer_transfer(
     transfer: CustomerTransfer,
     principal: Annotated[AuthenticatedPrincipal, Depends(_principal)],
 ) -> dict[str, object]:
-    """Record a simulated customer transfer for local customer-portal testing."""
-    global DEMO_CUSTOMER_BALANCE
+    """Route a simulated card payment through the chosen gateway."""
+    status, latency_ms = decide_outcome(transfer.gateway)
+    succeeded = status == "Success"
+    reference = next_reference()
+    activity_row = payment_activity(
+        reference=reference,
+        recipient=transfer.recipient,
+        amount=transfer.amount,
+        gateway=transfer.gateway,
+        status=status,
+    )
+    database = None
     if os.getenv("MONGODB_URI"):
         database = _live_database()
         customer = database["customer_users"].find_one({"email": principal.subject})
@@ -384,58 +406,85 @@ def customer_transfer(
                 status.HTTP_404_NOT_FOUND,
                 "Customer profile unavailable. Run payment-seed-customers.",
             )
-        balance = float(customer["accounts"][0]["balance"])
-        if transfer.amount > balance:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "Insufficient available balance",
+        try:
+            accounts = apply_balance(
+                list(customer["accounts"]), transfer.amount, succeeded
             )
-        reference = str(uuid4())
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
         changed = database["customer_users"].update_one(
-            {"_id": customer["_id"], "accounts.0.balance": {"$gte": transfer.amount}},
-            {"$inc": {"accounts.0.balance": -transfer.amount}},
+            {"_id": customer["_id"]},
+            {"$set": {"accounts": accounts}},
         )
-        if changed.modified_count != 1:
+        if changed.matched_count != 1:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                "Balance changed. Refresh and retry transfer.",
+                "Balance could not be updated. Refresh and retry.",
             )
         database["customer_activity"].insert_one(
             {
-                "id": reference,
+                **activity_row,
                 "customer_id": customer["_id"],
-                "name": transfer.recipient,
-                "category": transfer.note or "Bank transfer",
-                "amount": -transfer.amount,
-                "date": "Just now",
-                "icon": "↗",
                 "created_at": datetime.now(UTC),
             }
         )
-        return {
-            "status": "scheduled",
-            "reference": reference,
-            "available_balance": balance - transfer.amount,
-        }
-    if transfer.amount > DEMO_CUSTOMER_BALANCE:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "Insufficient available balance"
+        sender_id = str(customer["_id"])
+        name = str(customer["customer_name"])
+        beneficiaries = list(customer["beneficiaries"])
+        notifications = int(customer.get("notifications", 0))
+        activity = list(
+            database["customer_activity"]
+            .find({"customer_id": customer["_id"]}, {"_id": 0, "customer_id": 0})
+            .sort("created_at", -1)
+            .limit(8)
         )
-    DEMO_CUSTOMER_BALANCE -= transfer.amount
-    activity = {
-        "id": str(uuid4()),
-        "name": transfer.recipient,
-        "category": transfer.note or "Bank transfer",
-        "amount": -transfer.amount,
-        "date": "Just now",
-        "icon": "↗",
-    }
-    DEMO_CUSTOMER_ACTIVITY.insert(0, activity)
-    _demo_audit("CUSTOMER_TRANSFER", str(activity["id"]), principal)
+    else:
+        try:
+            accounts = apply_balance(
+                list(DEMO_CUSTOMER["accounts"]), transfer.amount, succeeded
+            )
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        DEMO_CUSTOMER["accounts"] = accounts
+        DEMO_CUSTOMER["activity"].insert(0, activity_row)
+        sender_id = str(DEMO_CUSTOMER["_id"])
+        name = str(DEMO_CUSTOMER["customer_name"])
+        beneficiaries = list(DEMO_CUSTOMER["beneficiaries"])
+        notifications = int(DEMO_CUSTOMER["notifications"])
+        activity = list(DEMO_CUSTOMER["activity"])
+        _demo_audit("CUSTOMER_TRANSFER", reference, principal)
+
+    _record_ledger_payment(
+        principal,
+        ledger_values(
+            reference=reference,
+            sender_id=sender_id,
+            amount=transfer.amount,
+            gateway=transfer.gateway,
+            status=status,
+            latency_ms=latency_ms,
+        ),
+        database,
+    )
+    payload = _portal_payload(
+        name,
+        accounts,
+        beneficiaries,
+        activity,
+        notifications,
+    )
     return {
-        "status": "scheduled",
-        "reference": activity["id"],
-        "available_balance": DEMO_CUSTOMER_BALANCE,
+        **payload,
+        "status": status.lower() if status == "Success" else "failed",
+        "gateway": transfer.gateway,
+        "latency_ms": latency_ms,
+        "reference": reference,
+        "available_balance": public_accounts(accounts)[0]["balance"],
+        "receipt": (
+            f"{transfer.gateway} approved ${transfer.amount:,.2f} to {transfer.recipient}."
+            if succeeded
+            else f"{transfer.gateway} declined ${transfer.amount:,.2f}. Balance unchanged."
+        ),
     }
 
 

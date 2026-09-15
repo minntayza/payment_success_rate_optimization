@@ -55,7 +55,7 @@ export default function Home() {
   );
 
   async function loadDashboard() {
-    if (!token) return;
+    if (!token || role !== "admin") return;
     const query = new URLSearchParams({ page: String(page), page_size: "12" });
     if (gateway) query.set("gateways", gateway);
     const response = await fetch(`${api}/api/dashboard?${query}`, { headers });
@@ -86,7 +86,7 @@ export default function Home() {
     loadDashboard().catch((problem: Error) => setError(problem.message));
     // Loading depends on an authenticated session and query state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, gateway, page]);
+  }, [token, role, gateway, page]);
 
   useEffect(() => {
     if (view === "admin") loadAudit().catch(() => undefined);

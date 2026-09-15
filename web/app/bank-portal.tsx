@@ -11,6 +11,18 @@ type Account = {
   currency: string;
 };
 
+type Card = {
+  network: string;
+  product: string;
+  pan: string;
+  holder: string;
+  expires: string;
+  cvv: string;
+  linked: string;
+  available: number;
+  currency: string;
+};
+
 type Beneficiary = {
   name: string;
   initials: string;
@@ -29,12 +41,14 @@ type Activity = {
 type Overview = {
   customer_name: string;
   accounts: Account[];
+  cards?: Card[];
   beneficiaries: Beneficiary[];
   activity: Activity[];
   notifications: number;
 };
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const gateways = ["Gateway A", "Gateway B", "Gateway C", "Gateway D"] as const;
 const navItems: { id: BankView; label: string }[] = [
   { id: "home", label: "Home" },
   { id: "accounts", label: "Accounts" },
@@ -42,9 +56,13 @@ const navItems: { id: BankView; label: string }[] = [
   { id: "cards", label: "Cards" },
 ];
 
-function lastFour(number: string) {
-  const digits = number.replace(/\D/g, "");
-  return (digits || number).slice(-4);
+function errorMessage(result: { detail?: unknown }) {
+  const detail = result.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail[0] && typeof detail[0] === "object" && detail[0] !== null && "msg" in detail[0]) {
+    return String((detail[0] as { msg: string }).msg);
+  }
+  return "Unable to send payment.";
 }
 
 export function BankPortal({
@@ -58,22 +76,27 @@ export function BankPortal({
 }) {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [view, setView] = useState<BankView>("home");
-  const [recipient, setRecipient] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [amount, setAmount] = useState("");
+  const [recipient, setRecipient] = useState("Alex Morgan");
+  const [accountNumber, setAccountNumber] = useState("88241903");
+  const [amount, setAmount] = useState("25.00");
+  const [gateway, setGateway] = useState<(typeof gateways)[number]>("Gateway A");
   const [notice, setNotice] = useState("");
+  const [noticeKind, setNoticeKind] = useState<"ok" | "bad">("ok");
 
   async function load() {
     const response = await fetch(`${api}/api/customer/overview`, { headers });
     const result = await response.json();
     if (!response.ok) {
-      throw new Error(result.detail ?? "Unable to load your account.");
+      throw new Error(errorMessage(result));
     }
     setOverview(result);
   }
 
   useEffect(() => {
-    load().catch((problem: Error) => setNotice(problem.message));
+    load().catch((problem: Error) => {
+      setNoticeKind("bad");
+      setNotice(problem.message);
+    });
     // Overview is loaded once the signed-in session headers are available.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers]);
@@ -87,35 +110,39 @@ export function BankPortal({
         recipient,
         account_number: accountNumber,
         amount: Number(amount),
+        gateway,
       }),
     });
     const result = await response.json();
     if (!response.ok) {
-      setNotice(result.detail);
+      setNoticeKind("bad");
+      setNotice(errorMessage(result));
       return;
     }
-    setNotice(`Transfer scheduled. Reference: ${String(result.reference).slice(0, 8)}`);
-    setRecipient("");
-    setAccountNumber("");
-    setAmount("");
-    await load();
+    setOverview((current) =>
+      current
+        ? {
+            ...current,
+            accounts: result.accounts ?? current.accounts,
+            cards: result.cards ?? current.cards,
+            activity: result.activity ?? current.activity,
+          }
+        : result,
+    );
+    setNoticeKind(result.status === "success" ? "ok" : "bad");
+    setNotice(String(result.receipt ?? "Payment processed."));
+    setAmount("25.00");
   }
 
   function chooseBeneficiary(person: Beneficiary) {
     setRecipient(person.name);
-    setAccountNumber(person.account_number.replace("•••• ", ""));
+    setAccountNumber(person.account_number.replaceAll("•", "").trim());
     setView("payments");
   }
 
-  const cards =
-    overview?.accounts.map((account, index) => ({
-      label: index === 0 ? "Everyday debit" : "Savings card",
-      network: index === 0 ? "Visa" : "Mastercard",
-      holder: overview.customer_name,
-      last4: lastFour(account.number),
-      linked: account.name,
-      expires: "09/28",
-    })) ?? [];
+  const cards = overview?.cards?.length
+    ? overview.cards
+    : [];
 
   return (
     <main className="bank-shell">
@@ -129,27 +156,14 @@ export function BankPortal({
               type="button"
               className={view === item.id ? "active" : ""}
               key={item.id}
-              onClick={() => {
-                setNotice("");
-                setView(item.id);
-              }}
+              onClick={() => setView(item.id)}
             >
               {item.label}
             </button>
           ))}
         </nav>
         <div>
-          <button
-            type="button"
-            className="bell"
-            onClick={() =>
-              setNotice(
-                overview
-                  ? `You have ${overview.notifications} notification${overview.notifications === 1 ? "" : "s"}.`
-                  : "Notifications will appear after your account loads.",
-              )
-            }
-          >
+          <button type="button" className="bell">
             ● {overview?.notifications ?? 0}
           </button>
           <button type="button" className="profile" onClick={onSignOut} aria-label="Sign out">
@@ -162,27 +176,21 @@ export function BankPortal({
           <>
             <p className="eyebrow">GOOD MORNING</p>
             <h1>Hello, {overview?.customer_name ?? "there"}.</h1>
-            <p className="bank-subtitle">Here is your financial snapshot for today.</p>
-            <AccountGrid
-              accounts={overview?.accounts}
-              onOpenAccount={() => {
-                setNotice("This academic demo cannot open a live bank account.");
-                setView("accounts");
-              }}
-            />
+            <p className="bank-subtitle">Pay through Gateway A for the most reliable demo route.</p>
+            <AccountGrid accounts={overview?.accounts} />
             <section className="bank-grid">
-              <ActivityCard
-                activity={overview?.activity}
-                onViewAll={() => setView("payments")}
-              />
+              <ActivityCard activity={overview?.activity} onViewAll={() => setView("payments")} />
               <TransferCard
                 recipient={recipient}
                 accountNumber={accountNumber}
                 amount={amount}
+                gateway={gateway}
                 notice={notice}
+                noticeKind={noticeKind}
                 setRecipient={setRecipient}
                 setAccountNumber={setAccountNumber}
                 setAmount={setAmount}
+                setGateway={setGateway}
                 onSubmit={transfer}
               />
             </section>
@@ -197,15 +205,8 @@ export function BankPortal({
           <>
             <p className="eyebrow">YOUR ACCOUNTS</p>
             <h1>Balances, in one place.</h1>
-            <p className="bank-subtitle">
-              Everyday and savings accounts from your MongoDB customer profile.
-            </p>
-            <AccountGrid
-              accounts={overview?.accounts}
-              onOpenAccount={() =>
-                setNotice("This academic demo cannot open a live bank account.")
-              }
-            />
+            <p className="bank-subtitle">Everyday account is debited as soon as Gateway A approves a payment.</p>
+            <AccountGrid accounts={overview?.accounts} />
             <section className="activity-card">
               <div className="section-title">
                 <div>
@@ -220,9 +221,9 @@ export function BankPortal({
         {view === "payments" && (
           <>
             <p className="eyebrow">PAYMENTS</p>
-            <h1>Send and review transfers.</h1>
+            <h1>Send a card payment.</h1>
             <p className="bank-subtitle">
-              Simulated transfers update the signed-in customer balance and activity feed.
+              Choose Gateway A, send $25, and watch the everyday balance drop immediately.
             </p>
             <section className="bank-grid">
               <ActivityCard activity={overview?.activity} />
@@ -230,10 +231,13 @@ export function BankPortal({
                 recipient={recipient}
                 accountNumber={accountNumber}
                 amount={amount}
+                gateway={gateway}
                 notice={notice}
+                noticeKind={noticeKind}
                 setRecipient={setRecipient}
                 setAccountNumber={setAccountNumber}
                 setAmount={setAmount}
+                setGateway={setGateway}
                 onSubmit={transfer}
               />
             </section>
@@ -246,46 +250,52 @@ export function BankPortal({
         {view === "cards" && (
           <>
             <p className="eyebrow">CARDS</p>
-            <h1>Cards linked to your accounts.</h1>
+            <h1>Your debit cards.</h1>
             <p className="bank-subtitle">
-              These are synthetic demo cards derived from your account numbers, not real
-              payment cards.
+              These use official Visa/Mastercard test numbers. Available funds match the account
+              balance after each payment.
             </p>
             <section className="card-grid">
               {cards.map((card) => (
-                <article className="virtual-card" key={card.last4}>
-                  <span>{card.network}</span>
-                  <strong>•••• {card.last4}</strong>
-                  <small>{card.label}</small>
-                  <p>
-                    {card.holder}
-                    <b>Exp {card.expires}</b>
-                  </p>
-                  <em>Linked to {card.linked}</em>
+                <article className={`plastic-card ${card.network.toLowerCase()}`} key={card.pan}>
+                  <div className="plastic-top">
+                    <i className="chip" aria-hidden="true" />
+                    <span>{card.network} {card.product}</span>
+                  </div>
+                  <strong>{card.pan}</strong>
+                  <div className="plastic-meta">
+                    <p>
+                      <small>Cardholder</small>
+                      <b>{card.holder}</b>
+                    </p>
+                    <p>
+                      <small>Valid thru</small>
+                      <b>{card.expires}</b>
+                    </p>
+                    <p>
+                      <small>CVV</small>
+                      <b>{card.cvv}</b>
+                    </p>
+                  </div>
+                  <em>
+                    Available {card.currency}{" "}
+                    {card.available.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </em>
                 </article>
               ))}
             </section>
           </>
-        )}
-        {notice && view !== "home" && view !== "payments" && (
-          <p className="transfer-notice">{notice}</p>
         )}
       </section>
     </main>
   );
 }
 
-function AccountGrid({
-  accounts,
-  onOpenAccount,
-}: {
-  accounts: Account[] | undefined;
-  onOpenAccount: () => void;
-}) {
+function AccountGrid({ accounts }: { accounts: Account[] | undefined }) {
   return (
     <section className="account-grid">
       {accounts?.map((account, index) => (
-        <article className={`account-card card-${index}`} key={account.number}>
+        <article className={`account-card card-${index}`} key={`${account.number}-${account.balance}`}>
           <span>{account.name}</span>
           <strong>
             {account.currency}{" "}
@@ -294,11 +304,6 @@ function AccountGrid({
           <small>{account.number}</small>
         </article>
       ))}
-      <button type="button" className="new-account" onClick={onOpenAccount}>
-        ＋
-        <br />
-        <span>Open an account</span>
-      </button>
     </section>
   );
 }
@@ -316,7 +321,8 @@ function ActivityList({ activity }: { activity: Activity[] | undefined }) {
             </span>
           </div>
           <strong className={item.amount < 0 ? "debit" : "credit"}>
-            {item.amount < 0 ? "−" : "+"}${Math.abs(item.amount).toFixed(2)}
+            {item.amount < 0 ? "−" : item.amount > 0 ? "+" : ""}
+            {item.amount === 0 ? "Declined" : `$${Math.abs(item.amount).toFixed(2)}`}
           </strong>
         </div>
       ))}
@@ -353,24 +359,30 @@ function TransferCard({
   recipient,
   accountNumber,
   amount,
+  gateway,
   notice,
+  noticeKind,
   setRecipient,
   setAccountNumber,
   setAmount,
+  setGateway,
   onSubmit,
 }: {
   recipient: string;
   accountNumber: string;
   amount: string;
+  gateway: (typeof gateways)[number];
   notice: string;
+  noticeKind: "ok" | "bad";
   setRecipient: (value: string) => void;
   setAccountNumber: (value: string) => void;
   setAmount: (value: string) => void;
+  setGateway: (value: (typeof gateways)[number]) => void;
   onSubmit: (event: FormEvent) => void;
 }) {
   return (
     <article className="transfer-card">
-      <p className="eyebrow">QUICK TRANSFER</p>
+      <p className="eyebrow">CARD PAYMENT</p>
       <h2>Send money</h2>
       <form onSubmit={onSubmit}>
         <label>
@@ -403,9 +415,23 @@ function TransferCard({
             required
           />
         </label>
-        <button type="submit">Continue transfer →</button>
+        <label>
+          Payment gateway
+          <select
+            value={gateway}
+            onChange={(event) => setGateway(event.target.value as (typeof gateways)[number])}
+          >
+            {gateways.map((item) => (
+              <option key={item} value={item}>
+                {item}
+                {item === "Gateway A" ? " — recommended, always succeeds" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit">Pay with Visa debit →</button>
       </form>
-      {notice && <p className="transfer-notice">{notice}</p>}
+      {notice && <p className={noticeKind === "bad" ? "transfer-error" : "transfer-notice"}>{notice}</p>}
     </article>
   );
 }
